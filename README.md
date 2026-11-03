@@ -3,6 +3,9 @@
 App web installabile su iPhone per registrare movimenti, conti e spese.
 HTML, CSS e JavaScript puri: nessuna dipendenza e nessuna compilazione.
 
+**App online:** https://chrimitra.github.io/pocket/ (pubblicata con GitHub Pages dal branch `main`).
+Per pubblicare un aggiornamento: alzare `CACHE` in `sw.js`, poi commit e push.
+
 ## Avviarla sul Mac
 
 ```bash

@@ -7,7 +7,7 @@ chiave di Enable Banking: la chiave non deve mai stare sul telefono.
 Tempo stimato: 20–30 minuti, una volta sola.
 
 > **Prima di iniziare:** Tasca deve essere già pubblicata online, con un indirizzo che
-> inizia con `https://` (es. `https://tuonome.github.io/tasca/`). La banca, dopo che hai
+> inizia con `https://` (es. `https://chrimitra.github.io/pocket/`). La banca, dopo che hai
 > autorizzato l'accesso, rimanda a quell'indirizzo. Lo trovi anche in fondo alla pagina
 > **Impostazioni → Collegamento banca** dell'app pubblicata.
 
@@ -22,7 +22,7 @@ tempo: se qualcosa non corrisponde, cerca la voce più simile.
 2. Nella sezione **Applications** crea una nuova applicazione:
    - **Environment:** `Production`
    - **Name:** `Tasca` (o quello che vuoi)
-   - **Allowed redirect URLs:** l'indirizzo della tua app, es. `https://tuonome.github.io/tasca/`
+   - **Allowed redirect URLs:** l'indirizzo della tua app, es. `https://chrimitra.github.io/pocket/`
      (deve essere identico, compresa la `/` finale)
    - Gli altri campi obbligatori (descrizione, email, privacy) compilali con i tuoi dati:
      l'app è solo per uso personale.
@@ -51,7 +51,7 @@ tempo: se qualcosa non corrisponde, cerca la voce più simile.
    | `EB_APP_ID` | l'Application ID del passo 1.3 |
    | `EB_PRIVATE_KEY` | tutto il contenuto del file `.pem`, comprese le righe `-----BEGIN…` e `-----END…` |
    | `TASCA_TOKEN` | una password lunga inventata da te (es. 5 parole a caso) |
-   | `ALLOWED_ORIGIN` | l'indirizzo dell'app **senza percorso**, es. `https://tuonome.github.io` |
+   | `ALLOWED_ORIGIN` | l'indirizzo dell'app **senza percorso**, es. `https://chrimitra.github.io` |
 
 7. Copia l'indirizzo della funzione. Ha questa forma:
    `https://<codice-progetto>.supabase.co/functions/v1/banca`
@@ -85,6 +85,6 @@ tempo: se qualcosa non corrisponde, cerca la voce più simile.
 |---|---|
 | "Chiave di accesso errata" | La password in Tasca è diversa da `TASCA_TOKEN` su Supabase. |
 | "Sul server mancano EB_APP_ID o EB_PRIVATE_KEY" | Controlla i Secrets su Supabase e rifai il deploy. |
-| "L'indirizzo dell'app non è tra quelli permessi" | `ALLOWED_ORIGIN` deve essere l'inizio dell'indirizzo dell'app, es. `https://tuonome.github.io`. |
+| "L'indirizzo dell'app non è tra quelli permessi" | `ALLOWED_ORIGIN` deve essere l'inizio dell'indirizzo dell'app, es. `https://chrimitra.github.io`. |
 | Errore sul redirect da Enable Banking | L'indirizzo in "Allowed redirect URLs" deve essere identico a quello mostrato in Tasca. |
 | "Il server non risponde" | Indirizzo della funzione sbagliato, oppure "Verify JWT" ancora attivo. |
