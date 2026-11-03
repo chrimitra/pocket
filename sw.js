@@ -1,7 +1,7 @@
 // Service worker: rende l'app disponibile offline.
 // Strategia "stale-while-revalidate": risponde subito dalla cache e aggiorna in background,
 // quindi una nuova versione pubblicata compare alla riapertura successiva.
-const CACHE = 'tasca-v5';
+const CACHE = 'tasca-v6';
 const SHELL = [
   './',
   'index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   'js/bank.js',
   'js/bank-sync.js',
   'js/sync.js',
+  'js/theme.js',
   'js/db.js',
   'js/format.js',
   'js/import/detect.js',

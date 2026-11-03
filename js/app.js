@@ -11,6 +11,7 @@ import * as importa from './views/importa.js';
 import * as regole from './views/regole.js';
 import * as banca from './views/banca.js';
 import { autoSync, handleBankReturn } from './sync.js';
+import { applyTheme } from './theme.js';
 
 const routes = { home, movimenti, budget, grafici, conti, altro, importa, regole, banca };
 // Schermate senza una voce propria nella barra in basso: quale voce evidenziare.
@@ -60,6 +61,7 @@ function setupInstallHint() {
 }
 
 async function boot() {
+  applyTheme();
   onChange(render);
   window.addEventListener('hashchange', render);
   document.getElementById('add-btn').addEventListener('click', () => openTransactionSheet());

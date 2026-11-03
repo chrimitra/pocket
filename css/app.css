@@ -23,11 +23,12 @@
   --tabbar-h: 64px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
+/* Tema scuro: automatico (impostazione dell'iPhone) oppure scelto in Impostazioni → Aspetto. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #101513;
     --surface: #1a201d;
     --surface-2: #232a26;
@@ -47,7 +48,31 @@
     --chart-axis: #3a433e;
     --chart-muted: #898781;
     --shadow: none;
+    color-scheme: dark;
   }
+}
+
+:root[data-theme='dark'] {
+  --bg: #101513;
+  --surface: #1a201d;
+  --surface-2: #232a26;
+  --text: #edf1ee;
+  --muted: #94a09a;
+  --line: #2a322e;
+  --accent: #3fbf9c;
+  --accent-soft: #1d3a32;
+  --on-accent: #06231b;
+  --pos: #4cc98a;
+  --neg: #f07a72;
+  --warn: #f0b04a;
+  --neg-text: #f07a72;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --chart-grid: #2a322e;
+  --chart-axis: #3a433e;
+  --chart-muted: #898781;
+  --shadow: none;
+  color-scheme: dark;
 }
 
 *,
@@ -995,6 +1020,7 @@ p {
 }
 
 .row:active { background: var(--surface-2); }
+a.row { color: inherit; }
 .row.archived { opacity: 0.55; }
 .row.danger .row-title { color: var(--neg); }
 .row.add .row-title { color: var(--accent); }
@@ -1197,9 +1223,13 @@ p {
 
 /* ---------- Pannello dal basso ---------- */
 
+/* top e height vengono adattati da JavaScript all'area visibile sopra la tastiera. */
 .sheet-root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
   z-index: 50;
 }
 

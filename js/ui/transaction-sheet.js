@@ -128,6 +128,8 @@ export function openTransactionSheet(tx = null) {
       el.querySelector('#f-cats').addEventListener('click', (e) => {
         const b = e.target.closest('[data-cat]');
         if (!b) return;
+        // Scelta la categoria, chiudi la tastiera numerica (su iPhone non ha il tasto "Fine").
+        if (document.activeElement === amountInput) amountInput.blur();
         categoryId = b.dataset.cat;
         drawCategories();
         showError(el, '');

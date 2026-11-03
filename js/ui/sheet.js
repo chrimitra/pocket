@@ -14,11 +14,30 @@ export function openSheet({ title, body, onMount }) {
       <div class="sheet-body">${body}</div>
     </section>`;
 
+  // Su iPhone la tastiera non rimpicciolisce la pagina: la copre. Adattiamo il pannello
+  // all'area davvero visibile, così resta tutto sopra la tastiera e scorre al suo interno.
+  const vv = window.visualViewport;
+  const fit = () => {
+    root.style.top = `${vv.offsetTop}px`;
+    root.style.height = `${vv.height}px`;
+  };
+  if (vv) {
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    fit();
+  }
+  // Il campo che stai compilando resta in vista quando compare la tastiera.
+  root.addEventListener('focusin', (e) => {
+    if (e.target.matches('input, select, textarea')) setTimeout(() => e.target.scrollIntoView({ block: 'nearest' }), 300);
+  });
+
   const onKey = (e) => e.key === 'Escape' && close();
   function close() {
     root.classList.remove('open');
     document.body.classList.remove('sheet-open');
     document.removeEventListener('keydown', onKey);
+    vv?.removeEventListener('resize', fit);
+    vv?.removeEventListener('scroll', fit);
     setTimeout(() => root.remove(), 260);
   }
 

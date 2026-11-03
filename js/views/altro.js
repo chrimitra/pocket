@@ -1,6 +1,7 @@
 import { esc, firstGrapheme, toISODate } from '../format.js';
 import { CATEGORY_COLORS, deleteCategory, exportData, importData, saveCategory, wipe } from '../store.js';
 import { refresh, state } from '../state.js';
+import { getTheme, setTheme } from '../theme.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
 
 export const title = 'Impostazioni';
@@ -27,6 +28,17 @@ export function render(el, data) {
 
   el.innerHTML = `
     <header class="page-header"><a class="back" href="#/home">‹ Home</a><h1>Impostazioni</h1></header>
+    <h2 class="section-title">Aspetto</h2>
+    <div class="segmented" role="radiogroup" aria-label="Aspetto">
+      ${[
+        ['auto', 'Automatico'],
+        ['light', '☀️ Chiaro'],
+        ['dark', '🌙 Scuro'],
+      ]
+        .map(([v, l]) => `<button type="button" role="radio" data-theme-choice="${v}" aria-checked="${getTheme() === v}">${l}</button>`)
+        .join('')}
+    </div>
+    <h2 class="section-title">Generale</h2>
     <section class="card flush rows">
       <a class="row" href="#/conti">
         <span class="row-icon">🏦</span>
@@ -71,12 +83,18 @@ export function render(el, data) {
       </ol>
     </section>
 
-    <p class="footnote">Per ora i dati sono salvati solo su questo dispositivo. Fai un backup ogni tanto: la sincronizzazione sul cloud arriverà in una fase successiva.<br>Tasca · versione 0.5</p>`;
+    <p class="footnote">Per ora i dati sono salvati solo su questo dispositivo. Fai un backup ogni tanto: la sincronizzazione sul cloud arriverà in una fase successiva.<br>Tasca · versione 0.6</p>`;
 
   el.querySelectorAll('[data-cat]').forEach((b) =>
     b.addEventListener('click', () => openCategorySheet(data.categories.find((c) => c.id === b.dataset.cat))),
   );
   el.querySelectorAll('[data-new]').forEach((b) => b.addEventListener('click', () => openCategorySheet(null, b.dataset.new)));
+  el.querySelectorAll('[data-theme-choice]').forEach((b) =>
+    b.addEventListener('click', () => {
+      setTheme(b.dataset.themeChoice);
+      render(el, data);
+    }),
+  );
   el.querySelector('#export').addEventListener('click', exportBackup);
   el.querySelector('#import-file').addEventListener('change', importBackup);
   el.querySelector('#wipe').addEventListener('click', async () => {

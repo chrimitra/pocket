@@ -7,6 +7,13 @@
     <meta name="description" content="Le tue finanze personali: movimenti, conti e spese.">
     <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#101513" media="(prefers-color-scheme: dark)">
+    <script>
+      // Applica subito il tema scelto, prima che la pagina compaia (niente lampo di colore sbagliato).
+      try {
+        const t = localStorage.getItem('tasca:theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
