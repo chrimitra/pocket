@@ -1,7 +1,7 @@
 // Service worker: rende l'app disponibile offline.
 // Strategia "stale-while-revalidate": risponde subito dalla cache e aggiorna in background,
 // quindi una nuova versione pubblicata compare alla riapertura successiva.
-const CACHE = 'tasca-v6';
+const CACHE = 'tasca-v7';
 const SHELL = [
   './',
   'index.html',

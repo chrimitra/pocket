@@ -83,7 +83,7 @@ export function render(el, data) {
       </ol>
     </section>
 
-    <p class="footnote">Per ora i dati sono salvati solo su questo dispositivo. Fai un backup ogni tanto: la sincronizzazione sul cloud arriverà in una fase successiva.<br>Tasca · versione 0.6</p>`;
+    <p class="footnote">Per ora i dati sono salvati solo su questo dispositivo. Fai un backup ogni tanto: la sincronizzazione sul cloud arriverà in una fase successiva.<br>Tasca · versione 0.7</p>`;
 
   el.querySelectorAll('[data-cat]').forEach((b) =>
     b.addEventListener('click', () => openCategorySheet(data.categories.find((c) => c.id === b.dataset.cat))),

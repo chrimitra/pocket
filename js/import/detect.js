@@ -8,15 +8,22 @@ const norm = (s) =>
     .replace(/[̀-ͯ]/g, '')
     .trim();
 
-const MONEY = /importo|ammontare|addebit|accredit|^dare|^avere|uscit|entrat/;
+const MONEY = /importo|ammontare|addebit|accredit|^dare|^avere|uscit|entrat|^amount/;
+const DATE = /^data|date/;
 
 // Le banche spesso mettono qualche riga di intestazione (titolare, IBAN...) prima della tabella.
 export function findHeader(rows) {
   for (let i = 0; i < Math.min(rows.length, 40); i++) {
     const cells = rows[i].map(norm);
-    if (cells.some((c) => c.startsWith('data')) && cells.some((c) => MONEY.test(c))) return i;
+    if (cells.some((c) => DATE.test(c)) && cells.some((c) => MONEY.test(c))) return i;
   }
   return -1;
+}
+
+// L'estratto conto di Revolut ha colonne riconoscibili: Prodotto/Product e Stato/State.
+export function isRevolut(header) {
+  const h = header.map(norm);
+  return h.some((c) => /^(product|prodotto)$/.test(c)) && h.some((c) => /^(state|stato)$/.test(c));
 }
 
 export function detectColumns(header) {
@@ -29,13 +36,22 @@ export function detectColumns(header) {
     return -1;
   };
   return {
-    date: find(/^data cont/, /^data oper/, /^data reg/, /^data$/, /^data(?!.*valuta)/, /^data/),
+    // Per Revolut conta la data di completamento: quella di inizio può essere anteriore.
+    date: find(/^data cont/, /^data oper/, /complet/, /^data reg/, /^data$/, /^date$/, /^data(?!.*valuta)/, /^data/, /date/),
     description: find(/descri/, /causale/, /dettagl/, /^operazione/, /movimento/, /beneficiario/),
-    amount: find(/^importo/, /ammontare/),
+    amount: find(/^importo/, /^amount/, /ammontare/),
     debit: find(/addebit/, /^dare/, /uscit/),
     credit: find(/accredit/, /^avere/, /entrat/),
+    // Colonne facoltative (presenti ad esempio nel file di Revolut).
+    fee: find(/^fee/, /^commission/),
+    state: find(/^state$/, /^stato$/),
+    type: find(/^type$/, /^tipo$/),
+    currency: find(/^currency$/, /^valuta$/),
   };
 }
+
+const COMPLETED = /^(completed|completat[oa])$/i;
+const TOP_UP = /top.?up|ricarica/i;
 
 export function isValidMapping(m) {
   return m.date >= 0 && m.description >= 0 && (m.amount >= 0 || m.debit >= 0 || m.credit >= 0);
@@ -72,8 +88,13 @@ export function parseLooseAmount(value) {
   return parseAmount(s);
 }
 
-// Converte una riga in { date, cents (negativo = uscita), description } oppure null se non è un movimento.
+/**
+ * Converte una riga in { date, cents (negativo = uscita), description, topUp } oppure null se non è un
+ * movimento da importare: righe vuote, operazioni annullate o in attesa, valute diverse dall'euro.
+ */
 export function toRecord(row, map) {
+  if (map.state >= 0 && !COMPLETED.test(String(row[map.state] ?? '').trim())) return null;
+  if (map.currency >= 0 && row[map.currency] && String(row[map.currency]).trim().toUpperCase() !== 'EUR') return null;
   const date = parseDate(row[map.date]);
   if (!date) return null;
   let cents = NaN;
@@ -85,8 +106,12 @@ export function toRecord(row, map) {
     else if (credit) cents = Math.abs(credit);
   }
   if (!cents || Number.isNaN(cents)) return null;
+  // La commissione è separata dall'importo: la togliamo, così il saldo torna.
+  const fee = map.fee >= 0 ? parseLooseAmount(row[map.fee]) : NaN;
+  if (fee) cents -= Math.abs(fee);
   const description = String(row[map.description] ?? '').replace(/\s+/g, ' ').trim() || 'Movimento senza descrizione';
-  return { date, cents, description };
+  const topUp = map.type >= 0 && TOP_UP.test(String(row[map.type] ?? ''));
+  return { date, cents, description, topUp };
 }
 
 export function columnName(i) {

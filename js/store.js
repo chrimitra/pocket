@@ -1,6 +1,6 @@
 // Logica di dominio: conti, categorie, movimenti, saldi e riepiloghi.
 import * as db from './db.js';
-import { DEFAULT_RULES } from './rules.js';
+import { DEFAULT_RULES, ruleOrder } from './rules.js';
 
 export const ACCOUNT_TYPES = {
   bank: { label: 'Conto corrente', icon: '🏦' },
@@ -71,9 +71,6 @@ async function seedRules() {
   await db.putMany('rules', rules);
   await db.put('meta', { key: 'rulesSeeded', value: true });
 }
-
-// Prima le regole create da te (le più recenti vincono), poi quelle di partenza dalla più specifica.
-const ruleOrder = (a, b) => (b.createdAt || 0) - (a.createdAt || 0) || b.keyword.length - a.keyword.length;
 
 export async function loadAll() {
   const [accounts, categories, transactions, goals, rules, bank] = await Promise.all([

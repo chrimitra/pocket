@@ -3,7 +3,7 @@
 // - già presenti (inseriti a mano o importati da file) → "riconciliati": restano i tuoi, con la categoria che hai scelto
 // - nuovi → creati, con la categoria delle regole; quelli senza regola finiscono "da rivedere"
 import { parseISODate } from './format.js';
-import { findRule, normalizeText } from './rules.js';
+import { findRule, normalizeText, rulesForAccount } from './rules.js';
 import { signedAmount } from './store.js';
 
 const MAX_DAYS_APART = 3;
@@ -21,9 +21,9 @@ export function bankDescription(t) {
   return parts.join(' · ') || 'Movimento bancario';
 }
 
-export function reconcile(bankTxs, { accountId, transactions, rules, categories }) {
+export function reconcile(bankTxs, { accountId, accounts, transactions, rules, categories }) {
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
-  const usableRules = rules.filter((r) => !(r.action === 'transfer' && r.accountId === accountId));
+  const usableRules = rulesForAccount(rules, accounts, accountId);
   const known = new Set(transactions.map((t) => t.externalId).filter((id) => id?.startsWith('eb:')));
   const candidates = transactions.filter((t) => !t.externalId?.startsWith('eb:') && signedAmount(t, accountId) !== 0);
   const claimed = new Set();

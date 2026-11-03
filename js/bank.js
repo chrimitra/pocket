@@ -128,7 +128,13 @@ export async function syncAll(data) {
       try {
         const from = acc.lastSync ? new Date(acc.lastSync - OVERLAP_DAYS * 864e5) : new Date(Date.now() - FIRST_SYNC_DAYS * 864e5);
         const { transactions: bankTxs } = await call(cfg, 'transactions', { uid: acc.uid, dateFrom: toISODate(from) });
-        const { create, update } = reconcile(bankTxs, { accountId: account.id, transactions, rules: data.rules, categories: data.categories });
+        const { create, update } = reconcile(bankTxs, {
+          accountId: account.id,
+          accounts: data.accounts,
+          transactions,
+          rules: data.rules,
+          categories: data.categories,
+        });
         await saveTransactions([...update, ...create]);
         transactions = [...transactions.filter((t) => !update.some((u) => u.id === t.id)), ...update, ...create];
         summary.added += create.length;

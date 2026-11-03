@@ -57,6 +57,35 @@ export function findRule(rules, description, isCredit, categoriesById) {
   });
 }
 
+// Prima le regole create da te (le più recenti vincono), poi quelle dei conti, poi quelle di partenza
+// dalla più specifica.
+export const ruleOrder = (a, b) => (b.createdAt || 0) - (a.createdAt || 0) || b.keyword.length - a.keyword.length;
+
+// Parole troppo comuni nel nome di un conto per riconoscerlo in una descrizione.
+const GENERIC_ACCOUNT_WORDS = new Set(['CONTO', 'CONTI', 'CARTA', 'CARTE', 'MIO', 'MIA', 'CONTANTI', 'RISPARMI', 'PERSONALE']);
+
+/**
+ * Regole implicite dai nomi dei tuoi conti: se in un movimento di BancoPosta compare "REVOLUT"
+ * e hai un conto che si chiama "Revolut", è un trasferimento tra i due, non una spesa.
+ */
+export function accountRules(accounts, excludeAccountId) {
+  const rules = [];
+  for (const a of accounts) {
+    if (a.archived || a.id === excludeAccountId || a.type === 'cash') continue;
+    for (const word of normalizeText(a.name).split(/[^A-Z0-9]+/)) {
+      if (word.length >= 4 && !GENERIC_ACCOUNT_WORDS.has(word)) {
+        rules.push({ id: `account:${a.id}:${word}`, keyword: word, action: 'transfer', accountId: a.id, createdAt: 1 });
+      }
+    }
+  }
+  return rules;
+}
+
+// Tutte le regole valide per i movimenti di un conto, nell'ordine in cui vanno provate.
+export function rulesForAccount(rules, accounts, accountId) {
+  return [...rules.filter((r) => !(r.action === 'transfer' && r.accountId === accountId)), ...accountRules(accounts, accountId)].sort(ruleOrder);
+}
+
 // Indovina la parola che identifica il negozio, es. "PAGAMENTO POS ESSELUNGA MILANO" → "ESSELUNGA".
 export function guessKeyword(description) {
   const words = normalizeText(description).split(/[^A-Z0-9&']+/);

@@ -38,6 +38,6 @@ Gli importi sono salvati in centesimi interi, così i calcoli non hanno errori d
 - [x] Fase 1 – Conti, movimenti, categorie, offline, installabile
 - [x] Fase 2 – Budget mensili per categoria, avvisi, obiettivi di risparmio
 - [x] Fase 3 – Grafici: saldo nel tempo, entrate/uscite per mese, spese per categoria, medie
-- [x] Fase 4 – Import da file (Excel .xlsx, CSV) con regole automatiche e anti-doppioni
+- [x] Fase 4 – Import da file (Excel .xlsx, CSV) di BancoPosta e Revolut, con regole automatiche e anti-doppioni
 - [x] Fase 5 – Collegamento BancoPosta via Enable Banking (codice pronto; da configurare con GUIDA-BANCA.md)
 - [ ] Fase 6 – Login, sincronizzazione cloud (Supabase), pubblicazione

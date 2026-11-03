@@ -1,5 +1,5 @@
 import { esc, euro, parseISODate } from '../format.js';
-import { columnName, detectColumns, findHeader, isValidMapping, toRecord } from '../import/detect.js';
+import { columnName, detectColumns, findHeader, isRevolut, isValidMapping, toRecord } from '../import/detect.js';
 import { readTable } from '../import/files.js';
 import { buildPlan, targetFromRule, toTransactions } from '../import/plan.js';
 import { guessKeyword, ruleMatches } from '../rules.js';
@@ -10,7 +10,9 @@ import { toast } from '../ui/sheet.js';
 export const title = 'Importa';
 
 // Stato dell'import in corso: resta finché non importi o cambi file.
-const ui = { accountId: null, fileName: '', rows: null, header: -1, map: null, showMapping: false, plan: null, error: '' };
+const ui = { accountId: null, fileName: '', rows: null, header: -1, map: null, showMapping: false, plan: null, error: '', revolut: false };
+const EMPTY_MAP = { date: -1, description: -1, amount: -1, debit: -1, credit: -1, fee: -1, state: -1, type: -1, currency: -1 };
+const REVOLUT_NAME = /revolut/i;
 
 const MAP_FIELDS = [
   ['date', 'Data'],
@@ -27,24 +29,26 @@ function records() {
 }
 
 function rebuildPlan() {
-  const { transactions, rules, categories } = state.data;
-  ui.plan = isValidMapping(ui.map) ? buildPlan(records(), { accountId: ui.accountId, transactions, rules, categories }) : null;
+  const { accounts, transactions, rules, categories } = state.data;
+  ui.plan = isValidMapping(ui.map) ? buildPlan(records(), { accountId: ui.accountId, accounts, transactions, rules, categories }) : null;
 }
 
 function reset() {
-  Object.assign(ui, { fileName: '', rows: null, header: -1, map: null, showMapping: false, plan: null, error: '' });
+  Object.assign(ui, { fileName: '', rows: null, header: -1, map: null, showMapping: false, plan: null, error: '', revolut: false });
 }
 
 export function render(el, data) {
   const accounts = data.accounts.filter((a) => !a.archived);
   if (!accounts.some((a) => a.id === ui.accountId)) ui.accountId = (accounts.find((a) => a.type === 'bank') ?? accounts[0])?.id ?? null;
+  const chosen = accounts.find((a) => a.id === ui.accountId);
 
   el.innerHTML = `
     <header class="page-header"><a class="back" href="#/movimenti">‹ Movimenti</a><h1>Importa movimenti</h1></header>
 
     <section class="card import-start">
       <ol class="steps">
-        <li>Su <strong>poste.it</strong> o nell'<strong>app BancoPosta</strong> apri la lista movimenti e scegli <strong>Scarica Excel</strong>.</li>
+        <li><strong>BancoPosta:</strong> su <strong>poste.it</strong> (da Safari) apri la lista movimenti e scegli <strong>Scarica Excel</strong>.<br>
+          <strong>Revolut:</strong> nell'app apri il conto in euro → <strong>…</strong> → <strong>Estratto conto</strong> → formato <strong>Excel</strong>.</li>
         <li>Scegli qui sotto il conto e il file scaricato.</li>
         <li>Controlla le categorie e tocca <strong>Importa</strong>. I movimenti già presenti vengono saltati.</li>
       </ol>
@@ -58,6 +62,13 @@ export function render(el, data) {
         <input type="file" id="imp-file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
       </label>
       ${ui.error ? `<p class="form-error">${esc(ui.error)}</p>` : ''}
+      ${
+        ui.revolut
+          ? REVOLUT_NAME.test(chosen?.name ?? '')
+            ? '<p class="hint-text">✓ Estratto conto Revolut riconosciuto: importo solo le operazioni completate in euro, commissioni comprese.</p>'
+            : '<p class="form-error">Questo sembra un estratto conto Revolut: scegli il conto Revolut qui sopra. Se non ce l\'hai, crealo in Impostazioni → Conti con un nome che contenga "Revolut".</p>'
+          : ''
+      }
     </section>
 
     ${ui.rows ? (ui.showMapping || !ui.plan ? mappingCard() : reviewSection(data)) : ''}`;
@@ -75,8 +86,14 @@ export function render(el, data) {
       ui.rows = await readTable(file);
       ui.fileName = file.name;
       ui.header = findHeader(ui.rows);
-      ui.map = ui.header >= 0 ? detectColumns(ui.rows[ui.header]) : { date: -1, description: -1, amount: -1, debit: -1, credit: -1 };
+      ui.map = ui.header >= 0 ? detectColumns(ui.rows[ui.header]) : { ...EMPTY_MAP };
       if (!ui.rows.length) throw new Error('Il file è vuoto.');
+      // Scegli da solo il conto giusto: Revolut per il suo estratto conto, altrimenti il conto corrente
+      // (così dopo aver importato Revolut il file di BancoPosta non finisce sul conto sbagliato).
+      ui.revolut = ui.header >= 0 && isRevolut(ui.rows[ui.header]);
+      const current = accounts.find((a) => a.id === ui.accountId);
+      if (ui.revolut) ui.accountId = accounts.find((a) => REVOLUT_NAME.test(a.name))?.id ?? ui.accountId;
+      else if (REVOLUT_NAME.test(current?.name ?? '')) ui.accountId = accounts.find((a) => a.type === 'bank')?.id ?? ui.accountId;
       rebuildPlan();
       // Colonne non riconosciute, o riconosciute ma senza movimenti validi: le fa scegliere a te.
       ui.showMapping = !ui.plan || (!ui.plan.items.length && !ui.plan.already);
@@ -180,10 +197,10 @@ function reviewSection(data) {
   return `
     <div class="import-summary">
       <span><strong>${items.length}</strong> nuovi</span>
-      ${dups ? `<span class="warn-text"><strong>${dups}</strong> forse già inseriti a mano</span>` : ''}
+      ${dups ? `<span class="warn-text"><strong>${dups}</strong> forse già presenti</span>` : ''}
       ${already ? `<span><strong>${already}</strong> già importati (saltati)</span>` : ''}
     </div>
-    ${dups ? '<p class="hint-text">I movimenti che sembrano già inseriti a mano (stesso importo, data vicina) sono deselezionati: spuntali solo se sono davvero diversi.</p>' : ''}
+    ${dups ? '<p class="hint-text">I movimenti che sembrano già presenti in Tasca (inseriti a mano o arrivati dall\'altro conto, con stesso importo e data vicina) sono deselezionati: spuntali solo se sono davvero diversi.</p>' : ''}
     <section class="card flush imp-list">
       ${items
         .map(
@@ -195,7 +212,7 @@ function reviewSection(data) {
               <span class="imp-desc">${esc(it.description)}</span>
               <strong class="imp-amount ${it.cents > 0 ? 'pos' : ''}">${euro(it.cents, { sign: true })}</strong>
             </div>
-            <div class="imp-meta">${shortDate(it.date)}${it.duplicateOf ? ' · <span class="badge warn">forse già inserito</span>' : ''}</div>
+            <div class="imp-meta">${shortDate(it.date)}${it.duplicateOf ? ' · <span class="badge warn">forse già presente</span>' : ''}</div>
             <select class="imp-select ${it.target ? '' : 'empty'}" data-target="${i}" aria-label="Categoria">${targetOptions(it, data)}</select>
             ${it.manual && it.target && guessKeyword(it.description) ? `<button type="button" class="text-btn small" data-remember="${i}">Ricorda per i movimenti simili</button>` : ''}
           </div>

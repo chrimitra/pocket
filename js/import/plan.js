@@ -1,6 +1,6 @@
 // Prepara la revisione dell'import: categorie dalle regole, doppioni, movimenti già importati.
 import { parseISODate } from '../format.js';
-import { findRule, normalizeText } from '../rules.js';
+import { findRule, normalizeText, rulesForAccount } from '../rules.js';
 import { signedAmount } from '../store.js';
 
 const MAX_DAYS_APART = 3;
@@ -10,12 +10,17 @@ export function targetFromRule(rule) {
   return rule.action === 'transfer' ? `t:${rule.accountId}` : `c:${rule.categoryId}`;
 }
 
-export function buildPlan(records, { accountId, transactions, rules, categories }) {
+export function buildPlan(records, { accountId, accounts, transactions, rules, categories }) {
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
-  const usableRules = rules.filter((r) => !(r.action === 'transfer' && r.accountId === accountId));
+  const usableRules = rulesForAccount(rules, accounts, accountId);
   const importedIds = new Set(transactions.map((t) => t.externalId).filter(Boolean));
-  // Movimenti inseriti a mano sullo stesso conto: ognuno può coincidere con una sola riga del file.
-  const manual = transactions.filter((t) => t.source !== 'import' && signedAmount(t, accountId) !== 0);
+  // Movimenti già in Tasca su questo conto che non vengono da questo stesso file: inseriti a mano,
+  // scaricati dalla banca, o trasferimenti nati importando l'altro conto (es. la ricarica di Revolut
+  // importata dal file di BancoPosta). Ognuno può coincidere con una sola riga del file.
+  const ownPrefix = `${accountId}|`;
+  const manual = transactions.filter((t) => !(t.source === 'import' && t.externalId?.startsWith(ownPrefix)) && signedAmount(t, accountId) !== 0);
+  // Le ricariche (es. su Revolut) arrivano di solito dal conto corrente.
+  const topUpFrom = accounts.find((a) => !a.archived && a.id !== accountId && a.type === 'bank');
   const claimed = new Set();
   const occurrences = new Map();
   const items = [];
@@ -35,12 +40,14 @@ export function buildPlan(records, { accountId, transactions, rules, categories 
     const twin = manual.find((t) => !claimed.has(t.id) && signedAmount(t, accountId) === r.cents && dayDiff(t.date, r.date) <= MAX_DAYS_APART);
     if (twin) claimed.add(twin.id);
     const rule = findRule(usableRules, r.description, r.cents > 0, categoriesById);
+    let target = rule ? targetFromRule(rule) : '';
+    if (!target && r.topUp && r.cents > 0 && topUpFrom) target = `t:${topUpFrom.id}`;
     items.push({
       ...r,
       externalId,
       include: !twin,
       duplicateOf: twin?.id ?? null,
-      target: rule ? targetFromRule(rule) : '',
+      target,
       manual: false,
     });
   }
