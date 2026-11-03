@@ -1,0 +1,265 @@
+import { esc, euro, parseISODate } from '../format.js';
+import { columnName, detectColumns, findHeader, isValidMapping, toRecord } from '../import/detect.js';
+import { readTable } from '../import/files.js';
+import { buildPlan, targetFromRule, toTransactions } from '../import/plan.js';
+import { guessKeyword, ruleMatches } from '../rules.js';
+import { saveRule, saveTransactions } from '../store.js';
+import { refresh, state } from '../state.js';
+import { toast } from '../ui/sheet.js';
+
+export const title = 'Importa';
+
+// Stato dell'import in corso: resta finché non importi o cambi file.
+const ui = { accountId: null, fileName: '', rows: null, header: -1, map: null, showMapping: false, plan: null, error: '' };
+
+const MAP_FIELDS = [
+  ['date', 'Data'],
+  ['description', 'Descrizione'],
+  ['amount', 'Importo (con segno)'],
+  ['debit', 'Addebiti / uscite'],
+  ['credit', 'Accrediti / entrate'],
+];
+
+const shortDate = (iso) => new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }).format(parseISODate(iso));
+
+function records() {
+  return ui.rows.slice(ui.header + 1).map((r) => toRecord(r, ui.map)).filter(Boolean);
+}
+
+function rebuildPlan() {
+  const { transactions, rules, categories } = state.data;
+  ui.plan = isValidMapping(ui.map) ? buildPlan(records(), { accountId: ui.accountId, transactions, rules, categories }) : null;
+}
+
+function reset() {
+  Object.assign(ui, { fileName: '', rows: null, header: -1, map: null, showMapping: false, plan: null, error: '' });
+}
+
+export function render(el, data) {
+  const accounts = data.accounts.filter((a) => !a.archived);
+  if (!accounts.some((a) => a.id === ui.accountId)) ui.accountId = (accounts.find((a) => a.type === 'bank') ?? accounts[0])?.id ?? null;
+
+  el.innerHTML = `
+    <header class="page-header"><a class="back" href="#/movimenti">‹ Movimenti</a><h1>Importa movimenti</h1></header>
+
+    <section class="card import-start">
+      <ol class="steps">
+        <li>Su <strong>poste.it</strong> o nell'<strong>app BancoPosta</strong> apri la lista movimenti e scegli <strong>Scarica Excel</strong>.</li>
+        <li>Scegli qui sotto il conto e il file scaricato.</li>
+        <li>Controlla le categorie e tocca <strong>Importa</strong>. I movimenti già presenti vengono saltati.</li>
+      </ol>
+      <div class="fields">
+        <label class="field"><span>Conto</span><select id="imp-account">
+          ${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === ui.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
+        </select></label>
+      </div>
+      <label class="btn ${ui.rows ? 'secondary' : 'primary'} block file-btn">
+        ${ui.rows ? `Cambia file · ${esc(ui.fileName)}` : 'Scegli il file (Excel o CSV)'}
+        <input type="file" id="imp-file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+      </label>
+      ${ui.error ? `<p class="form-error">${esc(ui.error)}</p>` : ''}
+    </section>
+
+    ${ui.rows ? (ui.showMapping || !ui.plan ? mappingCard() : reviewSection(data)) : ''}`;
+
+  el.querySelector('#imp-account').addEventListener('change', (e) => {
+    ui.accountId = e.target.value;
+    if (ui.rows) rebuildPlan();
+    render(el, data);
+  });
+  el.querySelector('#imp-file').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    reset();
+    try {
+      ui.rows = await readTable(file);
+      ui.fileName = file.name;
+      ui.header = findHeader(ui.rows);
+      ui.map = ui.header >= 0 ? detectColumns(ui.rows[ui.header]) : { date: -1, description: -1, amount: -1, debit: -1, credit: -1 };
+      if (!ui.rows.length) throw new Error('Il file è vuoto.');
+      rebuildPlan();
+      // Colonne non riconosciute, o riconosciute ma senza movimenti validi: le fa scegliere a te.
+      ui.showMapping = !ui.plan || (!ui.plan.items.length && !ui.plan.already);
+    } catch (err) {
+      reset();
+      ui.error = err.message || 'Non riesco a leggere questo file.';
+    }
+    render(el, data);
+  });
+
+  bindMapping(el, data);
+  bindReview(el, data);
+}
+
+// ---------- Scelta delle colonne ----------
+
+function mappingCard() {
+  const header = ui.header >= 0 ? ui.rows[ui.header] : null;
+  const sample = ui.rows[ui.header + 1] ?? [];
+  const width = Math.max(...ui.rows.slice(0, 50).map((r) => r.length));
+  const options = (selected) =>
+    `<option value="-1">—</option>` +
+    Array.from({ length: width }, (_, i) => {
+      const name = header?.[i] || `Colonna ${columnName(i)}`;
+      const hint = sample[i] ? ` (es. ${sample[i].slice(0, 18)})` : '';
+      return `<option value="${i}" ${i === selected ? 'selected' : ''}>${esc(name + hint)}</option>`;
+    }).join('');
+  const preview = isValidMapping(ui.map) ? records().slice(0, 3) : [];
+
+  return `
+    <section class="card">
+      <h2 class="card-title">Colonne del file</h2>
+      <p class="card-sub">${
+        isValidMapping(ui.map)
+          ? 'Controlla che le colonne siano giuste.'
+          : 'Non ho riconosciuto da solo le colonne: indica dove si trovano data, descrizione e importo.'
+      }</p>
+      <div class="fields mapping">
+        ${MAP_FIELDS.map(([key, label]) => `<label class="field"><span>${label}</span><select data-map="${key}">${options(ui.map[key])}</select></label>`).join('')}
+      </div>
+      <p class="hint-text">Basta una colonna "Importo" con il segno, oppure le due colonne separate per addebiti e accrediti.</p>
+      ${
+        preview.length
+          ? `<div class="preview">${preview
+              .map((r) => `<div><span>${shortDate(r.date)} · ${esc(r.description.slice(0, 40))}</span><strong class="${r.cents > 0 ? 'pos' : ''}">${euro(r.cents, { sign: true })}</strong></div>`)
+              .join('')}</div>`
+          : isValidMapping(ui.map)
+            ? '<p class="form-error">Con queste colonne non trovo nessun movimento valido.</p>'
+            : ''
+      }
+      <button type="button" class="btn primary block" id="map-done" ${preview.length ? '' : 'disabled'}>Continua</button>
+    </section>`;
+}
+
+function bindMapping(el, data) {
+  el.querySelectorAll('[data-map]').forEach((s) =>
+    s.addEventListener('change', () => {
+      ui.map = { ...ui.map, [s.dataset.map]: Number(s.value) };
+      // Se l'intestazione non è stata trovata, tutte le righe sono dati.
+      render(el, data);
+    }),
+  );
+  el.querySelector('#map-done')?.addEventListener('click', () => {
+    ui.showMapping = false;
+    rebuildPlan();
+    render(el, data);
+  });
+}
+
+// ---------- Revisione ----------
+
+function targetOptions(item, data) {
+  const kind = item.cents > 0 ? 'income' : 'expense';
+  const cats = data.categories.filter((c) => c.kind === kind && !c.archived);
+  const others = data.accounts.filter((a) => !a.archived && a.id !== ui.accountId);
+  return (
+    `<option value="" ${item.target ? '' : 'selected'}>Scegli categoria…</option>` +
+    cats.map((c) => `<option value="c:${esc(c.id)}" ${item.target === `c:${c.id}` ? 'selected' : ''}>${esc(c.icon)} ${esc(c.name)}</option>`).join('') +
+    (others.length
+      ? `<optgroup label="Trasferimento">${others
+          .map((a) => `<option value="t:${esc(a.id)}" ${item.target === `t:${a.id}` ? 'selected' : ''}>⇄ ${item.cents < 0 ? 'Verso' : 'Da'} ${esc(a.name)}</option>`)
+          .join('')}</optgroup>`
+      : '')
+  );
+}
+
+function reviewSection(data) {
+  const { items, already } = ui.plan;
+  const included = items.filter((it) => it.include);
+  const uncategorized = included.filter((it) => !it.target).length;
+  const dups = items.filter((it) => it.duplicateOf).length;
+
+  if (!items.length) {
+    return `<section class="card">
+      <p><strong>Niente di nuovo da importare.</strong></p>
+      <p class="muted">${already ? `Tutti i ${already} movimenti del file sono già stati importati.` : 'Nel file non ho trovato movimenti.'}</p>
+      <button type="button" class="text-btn" id="show-mapping">Controlla le colonne</button>
+    </section>`;
+  }
+
+  return `
+    <div class="import-summary">
+      <span><strong>${items.length}</strong> nuovi</span>
+      ${dups ? `<span class="warn-text"><strong>${dups}</strong> forse già inseriti a mano</span>` : ''}
+      ${already ? `<span><strong>${already}</strong> già importati (saltati)</span>` : ''}
+    </div>
+    ${dups ? '<p class="hint-text">I movimenti che sembrano già inseriti a mano (stesso importo, data vicina) sono deselezionati: spuntali solo se sono davvero diversi.</p>' : ''}
+    <section class="card flush imp-list">
+      ${items
+        .map(
+          (it, i) => `
+        <div class="imp-row ${it.include ? '' : 'off'}">
+          <input type="checkbox" class="imp-check" data-check="${i}" ${it.include ? 'checked' : ''} aria-label="Includi movimento">
+          <div class="imp-main">
+            <div class="imp-top">
+              <span class="imp-desc">${esc(it.description)}</span>
+              <strong class="imp-amount ${it.cents > 0 ? 'pos' : ''}">${euro(it.cents, { sign: true })}</strong>
+            </div>
+            <div class="imp-meta">${shortDate(it.date)}${it.duplicateOf ? ' · <span class="badge warn">forse già inserito</span>' : ''}</div>
+            <select class="imp-select ${it.target ? '' : 'empty'}" data-target="${i}" aria-label="Categoria">${targetOptions(it, data)}</select>
+            ${it.manual && it.target && guessKeyword(it.description) ? `<button type="button" class="text-btn small" data-remember="${i}">Ricorda per i movimenti simili</button>` : ''}
+          </div>
+        </div>`,
+        )
+        .join('')}
+    </section>
+    <button type="button" class="text-btn" id="show-mapping">Colonne sbagliate? Controllale</button>
+    <div class="import-bar">
+      ${uncategorized ? `<p>${uncategorized} senza categoria finiranno in «Altro»</p>` : ''}
+      <button type="button" class="btn primary block" id="do-import" ${included.length ? '' : 'disabled'}>Importa ${included.length} moviment${included.length === 1 ? 'o' : 'i'}</button>
+    </div>`;
+}
+
+function bindReview(el, data) {
+  el.querySelector('#show-mapping')?.addEventListener('click', () => {
+    ui.showMapping = true;
+    render(el, data);
+  });
+  if (!ui.plan) return;
+  const { items } = ui.plan;
+
+  el.querySelectorAll('[data-check]').forEach((c) =>
+    c.addEventListener('change', () => {
+      items[c.dataset.check].include = c.checked;
+      render(el, data);
+    }),
+  );
+  el.querySelectorAll('[data-target]').forEach((s) =>
+    s.addEventListener('change', () => {
+      Object.assign(items[s.dataset.target], { target: s.value, manual: true });
+      render(el, data);
+    }),
+  );
+  el.querySelectorAll('[data-remember]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const item = items[b.dataset.remember];
+      const keyword = prompt('Quando la descrizione contiene questa parola, usa la stessa scelta:', guessKeyword(item.description))?.trim();
+      if (!keyword) return;
+      const rule = item.target.startsWith('t:')
+        ? { keyword, action: 'transfer', accountId: item.target.slice(2) }
+        : { keyword, action: 'category', categoryId: item.target.slice(2) };
+      if (!ruleMatches(rule, item.description)) {
+        alert(`«${keyword}» non compare nella descrizione di questo movimento.`);
+        return;
+      }
+      await saveRule(rule);
+      // Applica subito la regola alle altre righe dello stesso tipo (entrata/uscita) non modificate a mano.
+      let applied = 0;
+      for (const it of items) {
+        if (it === item || it.manual || Math.sign(it.cents) !== Math.sign(item.cents) || !ruleMatches(rule, it.description)) continue;
+        it.target = targetFromRule(rule);
+        applied++;
+      }
+      toast(applied ? `Regola salvata · applicata ad altri ${applied}` : 'Regola salvata');
+      await refresh();
+    }),
+  );
+  el.querySelector('#do-import')?.addEventListener('click', async () => {
+    const list = toTransactions(items, ui.accountId, data.categories);
+    await saveTransactions(list);
+    reset();
+    toast(`${list.length} movimenti importati`);
+    location.hash = '#/movimenti';
+    await refresh();
+  });
+}
