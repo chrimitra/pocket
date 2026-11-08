@@ -1,7 +1,27 @@
 // Formattazione di importi e date in italiano. Gli importi sono sempre in centesimi (interi).
 const eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', useGrouping: 'always' });
 
+// "Nascondi importi": tutti gli importi diventano •••, utile se apri l'app in pubblico.
+const HIDE_KEY = 'tasca:hideAmounts';
+let hidden = false;
+try {
+  hidden = localStorage.getItem(HIDE_KEY) === '1';
+} catch {
+  // memoria non disponibile: importi visibili
+}
+export const amountsHidden = () => hidden;
+export function setAmountsHidden(value) {
+  hidden = value;
+  try {
+    if (value) localStorage.setItem(HIDE_KEY, '1');
+    else localStorage.removeItem(HIDE_KEY);
+  } catch {
+    // vale finché l'app resta aperta
+  }
+}
+
 export function euro(cents, { sign = false } = {}) {
+  if (hidden) return '•••• €';
   const s = eur.format(Math.abs(cents) / 100);
   if (cents < 0) return '−' + s;
   if (sign && cents > 0) return '+' + s;

@@ -217,7 +217,7 @@ function reviewSection(data) {
               <strong class="imp-amount ${it.cents > 0 ? 'pos' : ''}">${euro(it.cents, { sign: true })}</strong>
             </div>
             <div class="imp-meta">${shortDate(it.date)}${it.duplicateOf ? ' · <span class="badge warn">forse già presente</span>' : ''}</div>
-            <select class="imp-select ${it.target ? '' : 'empty'}" data-target="${i}" aria-label="Categoria">${targetOptions(it, data)}</select>
+            <select class="imp-select ${it.target ? '' : 'is-empty'}" data-target="${i}" aria-label="Categoria">${targetOptions(it, data)}</select>
             ${it.manual && it.target && guessKeyword(it.description) ? `<button type="button" class="text-btn small" data-remember="${i}">Ricorda per i movimenti simili</button>` : ''}
           </div>
         </div>`,

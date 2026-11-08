@@ -1,8 +1,9 @@
 // Inserimento e modifica di un movimento, con tastierino numerico integrato:
 // la tastiera dell'iPhone non compare per l'importo, quindi non copre più nulla.
 import { esc, euro, parseISODate, toISODate } from '../format.js';
+import { describeSchedule } from '../recurring.js';
 import { guessKeyword, prettyDescription, ruleMatches } from '../rules.js';
-import { budgetLevel, deleteTransaction, monthSummary, saveRule, saveTransaction, saveTransactions } from '../store.js';
+import { budgetLevel, deleteTransaction, monthSummary, saveRecurring, saveRule, saveTransaction, saveTransactions } from '../store.js';
 import { refresh, state } from '../state.js';
 import { icon } from './icons.js';
 import { openSheet, showError, toast } from './sheet.js';
@@ -41,6 +42,34 @@ function byUsage(list, transactions) {
   return [...list].sort((a, b) => (uses.get(b.id) || 0) - (uses.get(a.id) || 0) || (a.order ?? 0) - (b.order ?? 0));
 }
 
+/**
+ * Spese frequenti: le combinazioni categoria + importo che registri più spesso
+ * (es. "☕ Ristoranti e bar 1,20 €"), da inserire con un tocco.
+ */
+const QUICK_DAYS = 90;
+const QUICK_MAX = 6;
+function frequentEntries(transactions) {
+  const since = toISODate(new Date(Date.now() - QUICK_DAYS * 864e5));
+  const groups = new Map();
+  for (const t of transactions) {
+    if ((t.type !== 'expense' && t.type !== 'income') || t.date < since || !t.categoryId) continue;
+    const key = `${t.type}|${t.categoryId}|${t.amount}`;
+    const g = groups.get(key) ?? { type: t.type, categoryId: t.categoryId, amount: t.amount, count: 0, last: '', notes: new Map(), accounts: new Map() };
+    g.count++;
+    if (t.date > g.last) g.last = t.date;
+    const note = t.note ? prettyDescription(t.note) : '';
+    if (note) g.notes.set(note, (g.notes.get(note) || 0) + 1);
+    g.accounts.set(t.accountId, (g.accounts.get(t.accountId) || 0) + 1);
+    groups.set(key, g);
+  }
+  const top = (m) => [...m].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  return [...groups.values()]
+    .filter((g) => g.count >= 2)
+    .sort((a, b) => b.count - a.count || b.last.localeCompare(a.last))
+    .slice(0, QUICK_MAX)
+    .map((g) => ({ ...g, note: top(g.notes), accountId: top(g.accounts) }));
+}
+
 // L'importo si scrive come su una calcolatrice: "12,5" vale 12,50 €.
 function rawToCents(raw) {
   if (!raw) return 0;
@@ -51,7 +80,7 @@ function rawToCents(raw) {
 function centsToRaw(cents) {
   const int = String(Math.floor(cents / 100));
   const dec = String(cents % 100).padStart(2, '0');
-  return dec === '00' ? int : `${int},${dec.replace(/0$/, '')}`;
+  return dec === '00' ? int : `${int},${dec}`;
 }
 
 function formatRaw(raw) {
@@ -104,6 +133,8 @@ export function openTransactionSheet(tx = null) {
   const options = (selected) =>
     usable.map((a) => `<option value="${esc(a.id)}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
   const bankText = tx?.bankDescription ?? (tx?.source === 'import' ? tx.note : null);
+  const quick = tx ? [] : frequentEntries(transactions);
+  let repeat = false;
 
   const top = `
     <div class="segmented type-switch" role="radiogroup" aria-label="Tipo di movimento">
@@ -128,12 +159,30 @@ export function openTransactionSheet(tx = null) {
         <input type="date" id="f-date" value="${esc(tx?.date ?? toISODate())}" aria-label="Data">
       </label>
       <button type="button" class="chip-select" id="c-note">${icon('note')}<span class="chip-text" id="v-note"></span></button>
+      ${
+        tx?.recurringId
+          ? ''
+          : `<button type="button" class="chip-select" id="c-repeat" aria-pressed="false">${icon('repeat')}<span class="chip-text" id="v-repeat">Ripeti</span></button>`
+      }
     </div>
     <div class="note-box" hidden>
       <input id="f-note" maxlength="140" enterkeyhint="done" placeholder="Es. pizza con gli amici" value="${esc(tx?.note ?? '')}" aria-label="Nota">
     </div>`;
 
   const body = `
+    ${
+      quick.length
+        ? `<div class="quick-row" id="f-quick" aria-label="Spese frequenti">${quick
+            .map((q, i) => {
+              const c = categories.find((x) => x.id === q.categoryId);
+              return `<button type="button" class="quick-chip" data-quick="${i}" data-kind="${q.type}" style="--c:${esc(c?.color ?? '#6C7A89')}">
+                <span class="quick-emoji">${esc(c?.icon ?? '•')}</span>
+                <span class="quick-text"><span>${esc(q.note || c?.name || '')}</span><strong>${euro(q.amount)}</strong></span>
+              </button>`;
+            })
+            .join('')}</div>`
+        : ''
+    }
     <p class="field-label" id="l-cats">Categoria</p>
     <div class="cat-grid" id="f-cats" role="radiogroup" aria-labelledby="l-cats"></div>
     ${
@@ -176,7 +225,7 @@ export function openTransactionSheet(tx = null) {
 
       function drawAmount(shake = false) {
         $('.amount-value').textContent = formatRaw(raw);
-        $('.amount-display').classList.toggle('empty', !raw);
+        $('.amount-display').classList.toggle('is-empty', !raw);
         $('.amount-sign').textContent = raw ? TYPES[type].sign : '';
         if (shake) {
           $('.amount-display').classList.remove('shake');
@@ -234,6 +283,8 @@ export function openTransactionSheet(tx = null) {
         $('#l-cats').hidden = $('#f-cats').hidden = type === 'transfer';
         $('#c-to').hidden = type !== 'transfer';
         $('#f-save').textContent = TYPES[type].save;
+        el.querySelectorAll('[data-quick]').forEach((b) => (b.hidden = b.dataset.kind !== type));
+        if ($('#f-quick')) $('#f-quick').hidden = !el.querySelector(`[data-quick][data-kind="${type}"]`);
         drawAmount();
         drawCategories();
         drawDetails();
@@ -283,6 +334,32 @@ export function openTransactionSheet(tx = null) {
       });
       noteInput.addEventListener('keydown', (e) => e.key === 'Enter' && noteInput.blur());
 
+      // Spesa frequente: un tocco compila importo, categoria, conto e nota; poi basta Salva.
+      $('#f-quick')?.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-quick]');
+        if (!b) return;
+        const q = quick[b.dataset.quick];
+        categoryId = q.categoryId;
+        raw = centsToRaw(q.amount);
+        if (q.accountId && [...$('#f-from').options].some((o) => o.value === q.accountId)) $('#f-from').value = q.accountId;
+        if (q.note && !noteInput.value.trim()) {
+          noteInput.value = q.note;
+          $('.note-box').hidden = false;
+        }
+        el.querySelectorAll('[data-quick]').forEach((x) => x.classList.toggle('selected', x === b));
+        showError(el, '');
+        setType(q.type);
+        $('#f-save').classList.add('pulse');
+      });
+
+      // Ripeti: crea anche una ricorrente mensile a partire da questo movimento.
+      $('#c-repeat')?.addEventListener('click', () => {
+        repeat = !repeat;
+        $('#c-repeat').classList.toggle('filled', repeat);
+        $('#c-repeat').setAttribute('aria-pressed', String(repeat));
+        $('#v-repeat').textContent = repeat ? 'Ogni mese' : 'Ripeti';
+      });
+
       $('#f-save').addEventListener('click', save);
       $('#f-delete')?.addEventListener('click', remove);
 
@@ -311,15 +388,31 @@ export function openTransactionSheet(tx = null) {
         if (type === 'transfer' && accountId === toAccountId) return showError(el, 'Scegli due conti diversi');
         if (!date) return showError(el, 'Scegli una data');
 
+        const note = noteInput.value.trim();
+        const rec = repeat
+          ? await saveRecurring({
+              type,
+              amount,
+              note,
+              accountId,
+              toAccountId: type === 'transfer' ? toAccountId : null,
+              categoryId: type === 'transfer' ? null : categoryId,
+              every: 'month',
+              day: Number(date.slice(8)),
+              startDate: date,
+              lastDone: date,
+            })
+          : null;
         const saved = await saveTransaction({
           ...tx,
+          ...(rec ? { recurringId: rec.id } : {}),
           type,
           amount,
           accountId,
           toAccountId: type === 'transfer' ? toAccountId : null,
           categoryId: type === 'transfer' ? null : categoryId,
           date,
-          note: noteInput.value.trim(),
+          note,
           toReview: false,
         });
         const remember = $('.remember');
@@ -352,6 +445,7 @@ export function openTransactionSheet(tx = null) {
         const alert = type === 'expense' ? budgetAlert(categoryId, date.slice(0, 7)) : null;
         if (alert) toast(alert.message, { tone: alert.level, action: undo });
         else if (alsoFixed) toast(`Regola salvata · sistemati altri ${alsoFixed} movimenti`);
+        else if (rec) toast(`${TYPES[type].saved} · si ripeterà ${describeSchedule(rec).toLowerCase()}`);
         else toast(tx ? 'Movimento aggiornato' : TYPES[type].saved, { action: undo });
       }
 

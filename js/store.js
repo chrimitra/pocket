@@ -73,8 +73,8 @@ async function seedRules() {
 }
 
 export async function loadAll() {
-  const [accounts, categories, transactions, goals, rules, bank] = await Promise.all([
-    db.getAll('accounts'), db.getAll('categories'), db.getAll('transactions'), db.getAll('goals'), db.getAll('rules'),
+  const [accounts, categories, transactions, goals, rules, recurring, bank] = await Promise.all([
+    db.getAll('accounts'), db.getAll('categories'), db.getAll('transactions'), db.getAll('goals'), db.getAll('rules'), db.getAll('recurring'),
     db.get('meta', 'bank'),
   ]);
   const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0);
@@ -84,6 +84,7 @@ export async function loadAll() {
     transactions,
     goals: goals.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
     rules: rules.sort(ruleOrder),
+    recurring: recurring.sort((a, b) => (a.day ?? 0) - (b.day ?? 0) || (a.createdAt || 0) - (b.createdAt || 0)),
     bank: bank?.value ?? null,
   };
 }
@@ -225,6 +226,14 @@ export async function saveGoal(g) {
 
 export const deleteGoal = (id) => db.remove('goals', id);
 
+export async function saveRecurring(r) {
+  const saved = { createdAt: Date.now(), every: 'month', auto: false, lastDone: null, ...r, id: r.id || uid() };
+  await db.put('recurring', saved);
+  return saved;
+}
+
+export const deleteRecurring = (id) => db.remove('recurring', id);
+
 export async function exportData() {
   // Il collegamento alla banca (chiave del server, sessioni) non finisce nel file di backup.
   const { bank, ...data } = await loadAll();
@@ -240,6 +249,7 @@ export async function importData(data) {
   await db.putMany('categories', data.categories);
   await db.putMany('transactions', data.transactions);
   await db.putMany('goals', Array.isArray(data.goals) ? data.goals : []);
+  await db.putMany('recurring', Array.isArray(data.recurring) ? data.recurring : []);
   await db.put('meta', { key: 'seeded', value: true });
   if (Array.isArray(data.rules)) {
     await db.putMany('rules', data.rules);

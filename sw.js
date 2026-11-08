@@ -2,7 +2,7 @@
 // Strategia "stale-while-revalidate": risponde subito dalla cache e aggiorna in background.
 // A ogni pubblicazione si alza CACHE: il nuovo service worker scarica tutti i file aggiornati
 // e l'app propone di ricaricare.
-const CACHE = 'tasca-v8';
+const CACHE = 'tasca-v9';
 const SHELL = [
   './',
   'index.html',
@@ -18,6 +18,8 @@ const SHELL = [
   'js/import/files.js',
   'js/import/plan.js',
   'js/insights.js',
+  'js/lock.js',
+  'js/recurring.js',
   'js/rules.js',
   'js/state.js',
   'js/store.js',
@@ -37,6 +39,7 @@ const SHELL = [
   'js/views/importa.js',
   'js/views/movimenti.js',
   'js/views/regole.js',
+  'js/views/ricorrenti.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',

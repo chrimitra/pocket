@@ -1,7 +1,11 @@
 // Grafici SVG disegnati a mano: linea con mirino e colonne raggruppate, con tooltip al tocco.
 // Gli importi arrivano in centesimi; gli assi mostrano euro interi.
+import { amountsHidden } from '../format.js';
+
 const NS = 'http://www.w3.org/2000/svg';
-const tickFormat = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0, useGrouping: 'always' });
+const numberFormat = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0, useGrouping: 'always' });
+// Con "Nascondi importi" anche i valori sugli assi spariscono.
+const tickFormat = { format: (v) => (amountsHidden() ? '•••' : numberFormat.format(v)) };
 
 function el(name, attrs = {}, parent) {
   const node = document.createElementNS(NS, name);

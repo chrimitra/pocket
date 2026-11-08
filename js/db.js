@@ -1,7 +1,7 @@
 // Piccolo wrapper attorno a IndexedDB: tutti i dati restano sul dispositivo.
 const DB_NAME = 'tasca';
-const DB_VERSION = 3;
-export const STORES = ['accounts', 'categories', 'transactions', 'goals', 'rules', 'meta'];
+const DB_VERSION = 4;
+export const STORES = ['accounts', 'categories', 'transactions', 'goals', 'rules', 'recurring', 'meta'];
 
 let dbPromise;
 
@@ -19,8 +19,14 @@ function open() {
         }
         if (e.oldVersion < 2) db.createObjectStore('goals', { keyPath: 'id' });
         if (e.oldVersion < 3) db.createObjectStore('rules', { keyPath: 'id' });
+        // Ogni nuova versione aggiunge archivi senza toccare quelli esistenti.
+        if (e.oldVersion < 4) db.createObjectStore('recurring', { keyPath: 'id' });
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        // Se un'altra scheda aggiorna il database, questa connessione si chiude e non lo blocca.
+        req.result.onversionchange = () => req.result.close();
+        resolve(req.result);
+      };
       req.onerror = () => reject(req.error);
     });
   }

@@ -39,7 +39,10 @@ export function render(el, data) {
 function openAccountSheet(account) {
   const { accounts, transactions } = state.data;
   const current = account ? balances([account], transactions).get(account.id) : 0;
-  const used = account && transactions.some((t) => t.accountId === account.id || t.toAccountId === account.id);
+  const used =
+    account &&
+    (transactions.some((t) => t.accountId === account.id || t.toAccountId === account.id) ||
+      state.data.recurring.some((r) => r.accountId === account.id || r.toAccountId === account.id));
 
   openSheet({
     title: account ? 'Modifica conto' : 'Nuovo conto',

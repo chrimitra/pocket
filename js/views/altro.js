@@ -1,4 +1,6 @@
-import { esc, firstGrapheme, toISODate } from '../format.js';
+import { amountsHidden, esc, euro, firstGrapheme, setAmountsHidden, toISODate } from '../format.js';
+import { disableLock, enableLock, lockEnabled, lockSupported } from '../lock.js';
+import { monthlyTotal } from '../recurring.js';
 import { CATEGORY_COLORS, deleteCategory, exportData, importData, saveCategory, wipe } from '../store.js';
 import { refresh, state } from '../state.js';
 import { getTheme, setTheme } from '../theme.js';
@@ -6,7 +8,7 @@ import { navRow, pageHeader } from '../ui/components.js';
 import { icon } from '../ui/icons.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
 
-export const APP_VERSION = '1.0';
+export const APP_VERSION = '1.1';
 
 export const title = 'Impostazioni';
 
@@ -49,6 +51,15 @@ export function render(el, data) {
     <h2 class="section-title">Conti e movimenti</h2>
     <section class="card flush rows">
       ${navRow({ href: '#/conti', iconName: 'wallet', title: 'Conti', sub: 'Saldi, nuovi conti, archiviati' })}
+      ${navRow({
+        href: '#/ricorrenti',
+        iconName: 'repeat',
+        title: 'Spese ricorrenti',
+        sub: data.recurring.length
+          ? `${data.recurring.length} attive · ${euro(monthlyTotal(data.recurring, 'expense'))} al mese di spese fisse`
+          : 'Affitto, bollette, abbonamenti, stipendio',
+        tone: 'primary',
+      })}
       ${navRow({ href: '#/importa', iconName: 'file', title: 'Importa da file', sub: 'Excel di BancoPosta o Revolut', tone: 'blue' })}
       ${navRow({ href: '#/regole', iconName: 'wand', title: 'Regole automatiche', sub: `${data.rules.length} regole che scelgono la categoria per te`, tone: 'violet' })}
       ${navRow({
@@ -58,6 +69,20 @@ export function render(el, data) {
         sub: connections ? `${connections} collegamento attivo` : 'Facoltativo · scarica i movimenti da solo',
         tone: 'neutral',
       })}
+    </section>
+
+    <h2 class="section-title">Privacy</h2>
+    <section class="card flush rows">
+      <label class="row">
+        <span class="row-icon tone-neutral">${icon('eye-off')}</span>
+        <span class="row-main"><span class="row-title">Nascondi gli importi</span><span class="row-sub">Mostra ••• al posto delle cifre (anche con l'occhio in Home)</span></span>
+        <input type="checkbox" role="switch" class="switch" id="hide-amounts" ${amountsHidden() ? 'checked' : ''}>
+      </label>
+      <label class="row" id="lock-row">
+        <span class="row-icon tone-neutral">${icon('faceid')}</span>
+        <span class="row-main"><span class="row-title">Blocca con Face ID</span><span class="row-sub" id="lock-sub">All'apertura Tasca chiede Face ID o il codice dell'iPhone</span></span>
+        <input type="checkbox" role="switch" class="switch" id="lock-switch" ${lockEnabled() ? 'checked' : ''}>
+      </label>
     </section>
 
     ${group('expense', 'Categorie di spesa')}
@@ -93,6 +118,31 @@ export function render(el, data) {
       render(el, data);
     }),
   );
+  el.querySelector('#hide-amounts').addEventListener('change', async (e) => {
+    setAmountsHidden(e.target.checked);
+    await refresh();
+  });
+  const lockSwitch = el.querySelector('#lock-switch');
+  lockSupported().then((ok) => {
+    if (ok || lockEnabled()) return;
+    lockSwitch.disabled = true;
+    el.querySelector('#lock-sub').textContent = 'Non disponibile su questo dispositivo o browser';
+  });
+  lockSwitch.addEventListener('change', async () => {
+    const wanted = lockSwitch.checked;
+    try {
+      if (wanted) {
+        await enableLock();
+        toast('Blocco attivo: la prossima volta Tasca chiederà Face ID');
+      } else {
+        await disableLock();
+        toast('Blocco disattivato');
+      }
+    } catch {
+      lockSwitch.checked = !wanted;
+      toast(wanted ? 'Blocco non attivato' : 'Serve Face ID per disattivare il blocco', 'warn');
+    }
+  });
   el.querySelector('#export').addEventListener('click', exportBackup);
   el.querySelector('#import-file').addEventListener('change', importBackup);
   el.querySelector('#wipe').addEventListener('click', async () => {
@@ -105,7 +155,7 @@ export function render(el, data) {
 
 function openCategorySheet(category, kind = category?.kind) {
   const { categories, transactions } = state.data;
-  const used = category && transactions.some((t) => t.categoryId === category.id);
+  const used = category && (transactions.some((t) => t.categoryId === category.id) || state.data.recurring.some((r) => r.categoryId === category.id));
 
   openSheet({
     title: category ? 'Modifica categoria' : 'Nuova categoria',

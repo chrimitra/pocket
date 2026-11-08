@@ -12,13 +12,16 @@ import * as regole from './views/regole.js';
 import * as banca from './views/banca.js';
 import { autoSync, handleBankReturn } from './sync.js';
 import { applyTheme } from './theme.js';
+import { setupLock } from './lock.js';
+import { applyAutomatic } from './recurring.js';
+import * as ricorrenti from './views/ricorrenti.js';
 import { esc } from './format.js';
 import { icon } from './ui/icons.js';
 import { toast } from './ui/sheet.js';
 
-const routes = { home, movimenti, budget, grafici, conti, altro, importa, regole, banca };
+const routes = { home, movimenti, budget, grafici, conti, altro, importa, regole, banca, ricorrenti };
 // Schermate senza una voce propria nella barra in basso: quale voce evidenziare.
-const parentTab = { conti: 'home', altro: 'home', regole: 'home', banca: 'home', importa: 'movimenti' };
+const parentTab = { conti: 'home', altro: 'home', regole: 'home', banca: 'home', ricorrenti: 'home', importa: 'movimenti' };
 const view = document.getElementById('view');
 let lastRoute = null;
 
@@ -65,6 +68,7 @@ function setupInstallHint() {
 
 async function boot() {
   applyTheme();
+  setupLock();
   onChange(render);
   window.addEventListener('hashchange', render);
   document.getElementById('add-btn').addEventListener('click', () => openTransactionSheet());
@@ -77,6 +81,17 @@ async function boot() {
     view.innerHTML = `<div class="empty"><span class="empty-icon">${icon('alert')}</span><p class="empty-title">Non riesco ad aprire i dati</p>
       <p class="empty-text">Il browser non permette di usare il database. ${esc(err?.message ?? '')}</p></div>`;
     return;
+  }
+
+  // Ricorrenti con "aggiungi da sola": registrate all'apertura.
+  try {
+    const added = await applyAutomatic(state.data);
+    if (added.length) {
+      await refresh();
+      toast(`Aggiunte in automatico: ${added.join(', ')}`);
+    }
+  } catch {
+    // non bloccare l'avvio per una ricorrente
   }
 
   navigator.storage?.persist?.().catch(() => {});

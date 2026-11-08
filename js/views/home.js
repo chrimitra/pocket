@@ -1,11 +1,15 @@
 import { dailyBalance } from '../analytics.js';
 import { daysLeft, RENEW_WARNING_DAYS } from '../bank.js';
-import { currentMonth, esc, euro, monthLabel, toISODate } from '../format.js';
+import { amountsHidden, currentMonth, esc, euro, monthLabel, setAmountsHidden, toISODate } from '../format.js';
 import { insightList, monthInsights } from '../insights.js';
+import { confirmDue, dueItems, linkDue, shortDate, skipDue, upcomingItems } from '../recurring.js';
+import { refresh } from '../state.js';
 import { balances, budgetLevel, budgetStatus, monthSummary, sortTransactions } from '../store.js';
 import { bindTxRows, budgetBar, emptyState, lookups, txRow } from '../ui/components.js';
 import { ACCOUNT_ICONS, icon } from '../ui/icons.js';
+import { toast } from '../ui/sheet.js';
 import { openTransactionSheet } from '../ui/transaction-sheet.js';
+import { recurringChip, recurringName, signedRecurring } from './ricorrenti.js';
 
 export const title = 'Home';
 const TREND_DAYS = 30;
@@ -30,7 +34,10 @@ export function render(el, data) {
         <p class="greeting">${greeting()}</p>
         <h1 class="home-title">I tuoi soldi</h1>
       </div>
-      <a class="icon-btn raised" href="#/altro" aria-label="Impostazioni, conti e categorie">${icon('settings')}</a>
+      <div class="home-actions">
+        <button type="button" class="icon-btn raised" id="toggle-amounts" aria-pressed="${amountsHidden()}" aria-label="${amountsHidden() ? 'Mostra gli importi' : 'Nascondi gli importi'}">${icon(amountsHidden() ? 'eye-off' : 'eye')}</button>
+        <a class="icon-btn raised" href="#/altro" aria-label="Impostazioni, conti e categorie">${icon('settings')}</a>
+      </div>
     </header>
 
     <section class="hero-card">
@@ -52,6 +59,8 @@ export function render(el, data) {
     </div>
 
     ${bankNotices(data)}
+
+    ${recurringCard(data, maps)}
 
     ${
       isFresh
@@ -108,6 +117,77 @@ export function render(el, data) {
 
   bindTxRows(el, data);
   el.querySelector('#first-tx')?.addEventListener('click', () => openTransactionSheet());
+  bindRecurring(el, data);
+  el.querySelector('#toggle-amounts').addEventListener('click', async () => {
+    setAmountsHidden(!amountsHidden());
+    toast(amountsHidden() ? 'Importi nascosti' : 'Importi visibili');
+    await refresh();
+  });
+}
+
+// Ricorrenti arrivate da confermare, e quelle in arrivo nei prossimi giorni.
+function recurringCard(data, maps) {
+  const due = dueItems(data.recurring, data.transactions);
+  const upcoming = upcomingItems(data.recurring, 7);
+  if (!due.length && !upcoming.length) return '';
+  const toAdd = due.filter((d) => !d.match).length;
+  return `
+    <section class="card">
+      <div class="card-head"><h2 class="card-title">${icon('repeat')}${due.length ? 'Da confermare' : 'In arrivo'}</h2><a class="card-link" href="#/ricorrenti">Gestisci ${icon('chevron-right')}</a></div>
+      ${
+        due.length
+          ? `<div class="due-list">${due
+              .map(
+                (d, i) => `
+              <div class="due-row">
+                ${recurringChip(d.recurring, maps)}
+                <div class="due-main">
+                  <strong>${esc(recurringName(d.recurring, maps))}</strong>
+                  <span>${signedRecurring(d.recurring)} · ${shortDate(d.date)}</span>
+                  ${d.match ? `<span class="due-match">${icon('check')}Sembra già registrata</span>` : ''}
+                </div>
+                <div class="due-actions">
+                  ${
+                    d.match
+                      ? `<button type="button" class="btn primary small" data-due-link="${i}">${icon('check')}Già registrata</button>
+                         <button type="button" class="btn ghost small" data-due-add="${i}" aria-label="Aggiungila lo stesso">Aggiungi</button>`
+                      : `<button type="button" class="btn primary small" data-due-add="${i}">${icon('plus')}Aggiungi</button>
+                         <button type="button" class="btn ghost small" data-due-skip="${i}" aria-label="Salta questa volta">Salta</button>`
+                  }
+                </div>
+              </div>`,
+              )
+              .join('')}</div>
+            ${toAdd > 1 ? `<button type="button" class="btn secondary block" id="due-all">${icon('check')}Aggiungi tutte (${toAdd})</button>` : ''}`
+          : ''
+      }
+      ${
+        upcoming.length
+          ? `<p class="upcoming">${due.length ? 'Nei prossimi giorni: ' : ''}${upcoming
+              .map((u) => `<span><strong>${esc(recurringName(u.recurring, maps))}</strong> ${shortDate(u.date)} (${signedRecurring(u.recurring)})</span>`)
+              .join(', ')}</p>`
+          : ''
+      }
+    </section>`;
+}
+
+function bindRecurring(el, data) {
+  const due = dueItems(data.recurring, data.transactions);
+  const run = async (fn, message) => {
+    await fn();
+    await refresh();
+    if (message) toast(message);
+  };
+  el.querySelectorAll('[data-due-add]').forEach((b) =>
+    b.addEventListener('click', () => run(() => confirmDue(due[b.dataset.dueAdd]), `Aggiunta: ${recurringName(due[b.dataset.dueAdd].recurring, lookups(data))}`)),
+  );
+  el.querySelectorAll('[data-due-link]').forEach((b) => b.addEventListener('click', () => run(() => linkDue(due[b.dataset.dueLink]))));
+  el.querySelectorAll('[data-due-skip]').forEach((b) => b.addEventListener('click', () => run(() => skipDue(due[b.dataset.dueSkip]), 'Saltata per questa volta')));
+  el.querySelector('#due-all')?.addEventListener('click', () =>
+    run(async () => {
+      for (const d of due) d.match ? await linkDue(d) : await confirmDue(d);
+    }, 'Ricorrenti registrate'),
+  );
 }
 
 function greeting() {

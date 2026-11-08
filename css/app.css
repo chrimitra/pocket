@@ -1283,15 +1283,41 @@ p {
 .field select option { direction: ltr; }
 .field input[type='date'] { display: flex; justify-content: flex-end; }
 
-.field.toggle input {
+/* Interruttore stile iPhone (per «Archiviato», «Aggiungi da sola», privacy…). */
+.field.toggle input,
+.switch {
   flex: none;
-  width: 22px;
-  height: 22px;
-  margin-left: auto;
-  accent-color: var(--primary);
-  -webkit-appearance: auto;
-  appearance: auto;
+  position: relative;
+  width: 51px !important;
+  height: 31px !important;
+  margin: 0 0 0 auto;
+  border-radius: 99px;
+  background: var(--surface-3);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  transition: background 0.2s;
 }
+
+.field.toggle input::after,
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.2);
+  transition: transform 0.2s;
+}
+
+.field.toggle input:checked,
+.switch:checked { background: var(--primary); }
+.field.toggle input:checked::after,
+.switch:checked::after { transform: translateX(20px); }
+.switch:disabled { opacity: 0.4; }
 
 .emoji-input { font-size: 24px !important; }
 
@@ -1354,7 +1380,7 @@ p {
 
 .amount-display[data-type='expense'] .amount-sign { color: var(--neg); }
 .amount-display[data-type='income'] { color: var(--pos); }
-.amount-display.empty .amount-value { color: var(--chart-axis); }
+.amount-display.is-empty .amount-value { color: var(--chart-axis); }
 
 .amount-cur {
   font-size: 30px;
@@ -1572,6 +1598,171 @@ p {
   .key { height: 42px; font-size: 22px; border-radius: 12px; }
   .save-btn { min-height: 50px; }
 }
+
+/* Spese frequenti: un tocco compila tutto */
+.quick-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 2px 16px 2px;
+}
+
+.quick-row::-webkit-scrollbar { display: none; }
+
+.quick-chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 8px;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+}
+
+.quick-chip.selected { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface)); }
+
+.quick-emoji {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+
+.quick-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 130px;
+}
+
+.quick-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-text strong { font-family: var(--font-display); font-size: 15px; color: var(--text); }
+
+.save-btn.pulse { animation: pulse 0.9s ease-out 2; }
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent); }
+  100% { box-shadow: 0 0 0 14px transparent; }
+}
+
+/* ---------- Ricorrenti in Home ---------- */
+
+.home-actions { display: flex; gap: 10px; }
+
+.due-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.due-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: center;
+}
+
+.due-row + .due-row { padding-top: 12px; border-top: 1px solid var(--line); }
+
+.due-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.due-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.due-main > span { font-size: 13.5px; color: var(--muted); }
+
+.due-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--pos) !important;
+  font-weight: 600;
+}
+
+.due-match .icon { width: 15px; height: 15px; }
+
+.due-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+.due-actions .icon { width: 17px; height: 17px; }
+
+.btn.small {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 14.5px;
+}
+
+.btn.ghost { background: var(--surface-2); color: var(--text-2); }
+
+.card .due-list + .btn { margin-top: 14px; }
+
+.upcoming {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.due-list + .upcoming { padding-top: 12px; border-top: 1px solid var(--line); }
+.upcoming strong { color: var(--text-2); font-weight: 600; }
+
+/* ---------- Blocco Face ID ---------- */
+
+html.locked #view,
+html.locked .tabbar,
+html.locked .install-hint,
+html.locked #toast { visibility: hidden; }
+
+#lock {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(120% 70% at 50% 0%, var(--primary-soft), transparent 70%),
+    var(--bg);
+}
+
+.lock-box {
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.lock-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 8px;
+}
+
+.lock-box h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.lock-box p { color: var(--muted); }
+.lock-box .btn { margin-top: 14px; }
 
 /* ---------- Budget e obiettivi ---------- */
 
@@ -2069,7 +2260,7 @@ p {
   max-width: 100%;
 }
 
-.imp-select.empty { color: var(--warn); font-weight: 650; }
+.imp-select.is-empty { color: var(--warn); font-weight: 650; }
 
 .import-bar {
   position: sticky;

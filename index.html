@@ -12,6 +12,8 @@
       try {
         const t = localStorage.getItem('tasca:theme');
         if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        // Con il blocco Face ID attivo, i dati restano nascosti fin dal primo istante.
+        if (localStorage.getItem('tasca:lock')) document.documentElement.classList.add('locked');
       } catch {}
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes">

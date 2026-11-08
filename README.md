@@ -25,6 +25,8 @@ Poi apri http://localhost:5173.
 - `js/import/`: lettura dei file (xlsx, csv, html), riconoscimento colonne, revisione e doppioni
 - `js/rules.js`: regole automatiche "descrizione contiene X → categoria Y" e descrizioni leggibili
 - `js/insights.js`: frasi che spiegano i numeri ("questo mese hai speso meno del solito…")
+- `js/recurring.js`, `js/views/ricorrenti.js`: spese e entrate ricorrenti (scadenze, conferma, automatiche)
+- `js/lock.js`: blocco con Face ID tramite passkey (protezione da occhi curiosi, non cifratura)
 - `js/ui/icons.js`: set di icone a linea; `js/ui/transaction-sheet.js`: inserimento con tastierino
 - `js/bank.js`, `js/bank-sync.js`, `js/sync.js`: collegamento banca, abbinamento con i movimenti esistenti, aggiornamento automatico
 - `server/supabase/functions/banca/index.ts`: funzione server che firma le richieste a Enable Banking (vedi `GUIDA-BANCA.md`)
@@ -43,4 +45,5 @@ Gli importi sono salvati in centesimi interi, così i calcoli non hanno errori d
 - [x] Fase 4 – Import da file (Excel .xlsx, CSV) di BancoPosta e Revolut, con regole automatiche e anti-doppioni
 - [x] Fase 5 – Collegamento BancoPosta via Enable Banking (codice pronto; da configurare con GUIDA-BANCA.md)
 - [x] Versione 1.0 – nuovo design (colori, icone, SF Pro Rounded), tastierino per l'importo, etichette parlanti, correzioni
+- [x] Versione 1.1 – spese ricorrenti, spese frequenti con un tocco, nascondi importi, blocco con Face ID
 - [ ] Fase 6 – Login e sincronizzazione cloud (Supabase)

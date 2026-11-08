@@ -1,6 +1,7 @@
 import {
   amountToInput, currentMonth, daysInMonth, esc, euro, firstGrapheme, monthLabel, parseAmount, parseISODate, shiftMonth, toISODate,
 } from '../format.js';
+import { fixedStillDue } from '../recurring.js';
 import { averageSpending, budgetStatus, deleteGoal, saveCategories, saveGoal } from '../store.js';
 import { refresh, state } from '../state.js';
 import { budgetBar, emptyState, pageHeader } from '../ui/components.js';
@@ -25,6 +26,17 @@ export function render(el, data) {
         : 'Hai già usato tutto il budget del mese: da qui in poi ogni spesa lo supera.';
   }
 
+  // Spese fisse (ricorrenti) che devono ancora arrivare questo mese: soldi già "impegnati".
+  let fixed = '';
+  if (isCurrent) {
+    const due = fixedStillDue(data.recurring);
+    if (due.total > 0) {
+      fixed = `<p class="pace">${icon('repeat')}<span>Ti restano da pagare <strong>${euro(due.total)}</strong> di spese fisse${
+        due.names.length ? ` (${esc(due.names.slice(0, 3).join(', '))}${due.names.length > 3 ? '…' : ''})` : ''
+      }: tienine conto.</span></p>`;
+    }
+  }
+
   el.innerHTML = `
     ${pageHeader('Budget', { sub: 'Quanto vuoi spendere, e quanto ti resta' })}
     <div class="month-nav">
@@ -44,6 +56,7 @@ export function render(el, data) {
             ${budgetBar(totalSpent, totalBudget)}
             <p class="muted small">${euro(totalSpent)} spesi su ${euro(totalBudget)} di budget</p>
             ${pace ? `<p class="pace">${icon('info')}<span>${pace}</span></p>` : ''}
+            ${fixed}
           </section>
 
           <section class="card flush rows">
