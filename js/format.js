@@ -24,8 +24,10 @@ export function parseAmount(input) {
   return neg ? -cents : cents;
 }
 
+// Importo da mostrare in un campo modificabile: "1.234,50" (parseAmount lo rilegge uguale).
+const plain = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
 export function amountToInput(cents) {
-  return (cents / 100).toFixed(2).replace('.', ',');
+  return plain.format(cents / 100).replace(/[\u2212]/, '-');
 }
 
 const pad = (n) => String(n).padStart(2, '0');

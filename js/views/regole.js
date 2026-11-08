@@ -2,7 +2,8 @@ import { esc } from '../format.js';
 import { ruleMatches } from '../rules.js';
 import { deleteRule, saveRule } from '../store.js';
 import { refresh, state } from '../state.js';
-import { emptyState } from '../ui/components.js';
+import { emptyState, pageHeader } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
 
 export const title = 'Regole';
@@ -25,10 +26,10 @@ export function render(el, data) {
   };
 
   el.innerHTML = `
-    <header class="page-header"><a class="back" href="#/altro">‹ Impostazioni</a><h1>Regole automatiche</h1></header>
+    ${pageHeader('Regole automatiche', { back: { href: '#/altro', label: 'Impostazioni' } })}
     <p class="hint-text">Quando importi un file, i movimenti la cui descrizione contiene la parola indicata ricevono subito la categoria giusta. Le regole in alto hanno la precedenza.</p>
-    <div class="filters single"><input type="search" id="rq" placeholder="Cerca una parola o una categoria" value="${esc(ui.q)}" aria-label="Cerca regole"></div>
-    <button class="btn secondary block" id="add-rule">+ Nuova regola</button>
+    <label class="search">${icon('search')}<input type="search" id="rq" placeholder="Cerca una parola o una categoria" value="${esc(ui.q)}" aria-label="Cerca regole"></label>
+    <button class="btn secondary block" id="add-rule">${icon('plus')}Nuova regola</button>
     <div id="rule-list"></div>`;
 
   const listEl = el.querySelector('#rule-list');
@@ -41,13 +42,13 @@ export function render(el, data) {
             const t = targetLabel(r, maps);
             return `
           <button class="row" data-rule="${esc(r.id)}">
-            <span class="row-icon" style="--c:${esc(t.color ?? '#6C7A89')}">${esc(t.icon)}</span>
+            ${t.icon === '⇄' ? `<span class="row-icon tone-neutral">${icon('transfer')}</span>` : `<span class="row-icon emoji" style="--c:${esc(t.color ?? '#6C7A89')}">${esc(t.icon)}</span>`}
             <span class="row-main"><span class="row-title">${esc(r.keyword)}</span><span class="row-sub ${t.broken ? 'neg' : ''}">→ ${esc(t.text)}</span></span>
-            <span class="row-chevron" aria-hidden="true">›</span>
+            <span class="row-chevron">${icon('chevron-right')}</span>
           </button>`;
           })
           .join('')}</section>`
-      : emptyState('🔎', 'Nessuna regola trovata.');
+      : emptyState('search', 'Nessuna regola trovata', 'Prova con un\'altra parola, oppure crea una nuova regola.');
     listEl.querySelectorAll('[data-rule]').forEach((b) =>
       b.addEventListener('click', () => openRuleSheet(data.rules.find((r) => r.id === b.dataset.rule))),
     );
@@ -88,8 +89,8 @@ function openRuleSheet(rule) {
       </div>
       <p class="hint-text" id="r-result">Conta la parola intera: «ENI» riconosce "ENI STATION" ma non "SERENITÀ". Maiuscole e accenti non contano.</p>
       <p class="form-error" hidden></p>
-      <button type="button" class="btn primary block" id="r-save">Salva</button>
-      ${rule ? '<button type="button" class="btn danger block" id="r-delete">Elimina regola</button>' : ''}`,
+      ${rule ? `<button type="button" class="btn danger-text block" id="r-delete">${icon('trash')}Elimina regola</button>` : ''}`,
+    footer: `<button type="button" class="btn primary block" id="r-save">${rule ? 'Salva modifiche' : 'Crea regola'}</button>`,
     onMount(el, close) {
       const keyword = el.querySelector('#r-keyword');
       const test = el.querySelector('#r-test');

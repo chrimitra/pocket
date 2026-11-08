@@ -12,6 +12,9 @@ import * as regole from './views/regole.js';
 import * as banca from './views/banca.js';
 import { autoSync, handleBankReturn } from './sync.js';
 import { applyTheme } from './theme.js';
+import { esc } from './format.js';
+import { icon } from './ui/icons.js';
+import { toast } from './ui/sheet.js';
 
 const routes = { home, movimenti, budget, grafici, conti, altro, importa, regole, banca };
 // Schermate senza una voce propria nella barra in basso: quale voce evidenziare.
@@ -71,16 +74,28 @@ async function boot() {
     await init();
     await refresh();
   } catch (err) {
-    view.innerHTML = `<div class="empty"><span class="empty-icon">⚠️</span><p>Non riesco ad aprire il database del browser.<br>${err?.message ?? ''}</p></div>`;
+    view.innerHTML = `<div class="empty"><span class="empty-icon">${icon('alert')}</span><p class="empty-title">Non riesco ad aprire i dati</p>
+      <p class="empty-text">Il browser non permette di usare il database. ${esc(err?.message ?? '')}</p></div>`;
     return;
   }
 
   navigator.storage?.persist?.().catch(() => {});
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  registerServiceWorker();
 
   if (!(await handleBankReturn())) autoSync();
   // Riaprendo l'app dopo un po' (iPhone la tiene sospesa), aggiorna di nuovo se serve.
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && autoSync());
+}
+
+// Quando è pronta una nuova versione dell'app, proponi di ricaricare (i dati non vengono toccati).
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;
+    toast('Nuova versione di Tasca pronta', { action: { label: 'Aggiorna', run: () => location.reload() } });
+  });
 }
 
 boot();

@@ -1,6 +1,8 @@
 import { amountToInput, esc, euro, parseAmount } from '../format.js';
 import { ACCOUNT_TYPES, balances, deleteAccount, saveAccount } from '../store.js';
 import { refresh, state } from '../state.js';
+import { pageHeader } from '../ui/components.js';
+import { ACCOUNT_ICONS, icon } from '../ui/icons.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
 
 export const title = 'Conti';
@@ -13,7 +15,7 @@ export function render(el, data) {
 
   const row = (a) => `
     <button class="row" data-acc="${esc(a.id)}">
-      <span class="row-icon">${ACCOUNT_TYPES[a.type]?.icon ?? '🏦'}</span>
+      <span class="row-icon tone-primary">${icon(ACCOUNT_ICONS[a.type] ?? 'wallet')}</span>
       <span class="row-main">
         <span class="row-title">${esc(a.name)}</span>
         <span class="row-sub">${ACCOUNT_TYPES[a.type]?.label ?? ''}</span>
@@ -22,11 +24,11 @@ export function render(el, data) {
     </button>`;
 
   el.innerHTML = `
-    <header class="page-header"><a class="back" href="#/altro">‹ Impostazioni</a><h1>Conti</h1><p class="muted">Totale ${euro(total)}</p></header>
+    ${pageHeader('Conti', { back: { href: '#/altro', label: 'Impostazioni' }, sub: `In tutto hai <strong>${euro(total)}</strong>` })}
     <section class="card flush rows">${active.map(row).join('') || '<p class="muted pad">Nessun conto attivo.</p>'}</section>
-    <button class="btn secondary block" id="add-acc">+ Aggiungi conto</button>
+    <button class="btn secondary block" id="add-acc">${icon('plus')}Aggiungi un conto</button>
     ${archived.length ? `<h2 class="section-title">Archiviati</h2><section class="card flush rows">${archived.map(row).join('')}</section>` : ''}
-    <p class="footnote">Tocca un conto per modificarne nome o saldo. Il collegamento automatico con BancoPosta arriverà in una fase successiva.</p>`;
+    <p class="footnote">Tocca un conto per cambiarne nome o saldo. Archivia i conti che non usi più: spariscono dalle scelte ma i loro movimenti restano.</p>`;
 
   el.querySelectorAll('[data-acc]').forEach((b) =>
     b.addEventListener('click', () => openAccountSheet(data.accounts.find((a) => a.id === b.dataset.acc))),
@@ -49,13 +51,13 @@ function openAccountSheet(account) {
             .map(([k, v]) => `<option value="${k}" ${k === (account?.type ?? 'bank') ? 'selected' : ''}>${v.icon} ${v.label}</option>`)
             .join('')}
         </select></label>
-        <label class="field"><span>Saldo attuale</span><input id="a-balance" inputmode="decimal" placeholder="0,00" value="${account ? amountToInput(current) : ''}"></label>
+        <label class="field"><span>Saldo di oggi</span><input id="a-balance" inputmode="decimal" placeholder="0,00" value="${account ? amountToInput(current) : ''}"></label>
         ${account ? `<label class="field toggle"><span>Archiviato</span><input type="checkbox" id="a-archived" ${account.archived ? 'checked' : ''}></label>` : ''}
       </div>
-      <p class="hint-text">Scrivi quanto c'è sul conto <em>adesso</em>: i movimenti già inseriti restano invariati.</p>
+      <p class="hint-text">Scrivi quanto c'è sul conto <strong>adesso</strong> (lo vedi nell'app della banca): i movimenti già inseriti restano come sono.</p>
       <p class="form-error" hidden></p>
-      <button type="button" class="btn primary block" id="a-save">Salva</button>
-      ${account && !used ? '<button type="button" class="btn danger block" id="a-delete">Elimina conto</button>' : ''}`,
+      ${account && !used ? `<button type="button" class="btn danger-text block" id="a-delete">${icon('trash')}Elimina conto</button>` : ''}`,
+    footer: `<button type="button" class="btn primary block" id="a-save">${account ? 'Salva modifiche' : 'Aggiungi conto'}</button>`,
     onMount(el, close) {
       el.querySelector('#a-save').addEventListener('click', async () => {
         const name = el.querySelector('#a-name').value.trim();

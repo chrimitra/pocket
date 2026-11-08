@@ -1,6 +1,8 @@
 // Pezzi di interfaccia riusati da più viste.
 import { esc, euro } from '../format.js';
+import { prettyDescription } from '../rules.js';
 import { budgetLevel, signedAmount } from '../store.js';
+import { icon } from './icons.js';
 import { openTransactionSheet } from './transaction-sheet.js';
 
 export function lookups(data) {
@@ -10,32 +12,35 @@ export function lookups(data) {
   };
 }
 
+/**
+ * Riga di un movimento. Il titolo è quello che ricordi (la nota o il negozio),
+ * sotto la categoria e il conto. Con accountId gli importi hanno il segno visto da quel conto.
+ */
 export function txRow(t, { acc, cat }, accountId) {
   const from = acc.get(t.accountId);
-  let icon, title, sub, color, amount, cls;
+  const note = t.note ? prettyDescription(t.note) : '';
+  let chip, title, sub, amount, cls;
   if (t.type === 'transfer') {
-    icon = '⇄';
-    title = t.note || 'Trasferimento';
+    chip = `<span class="row-icon tone-neutral">${icon('transfer')}</span>`;
+    title = note || 'Trasferimento';
     sub = `${from?.name ?? '—'} → ${acc.get(t.toAccountId)?.name ?? '—'}`;
-    color = '#6C7A89';
     const v = accountId ? signedAmount(t, accountId) : t.amount;
     amount = euro(v, { sign: Boolean(accountId) });
     cls = !accountId ? 'neutral' : v < 0 ? 'neg' : 'pos';
   } else {
     const c = cat.get(t.categoryId);
-    icon = c?.icon ?? '•';
-    title = c?.name ?? 'Senza categoria';
-    sub = [t.note, from?.name].filter(Boolean).join(' · ');
-    color = c?.color ?? '#6C7A89';
+    chip = `<span class="row-icon emoji" style="--c:${esc(c?.color ?? '#6C7A89')}">${esc(c?.icon ?? '•')}</span>`;
+    title = note || c?.name || 'Senza categoria';
+    sub = [note ? c?.name : null, from?.name].filter(Boolean).join(' · ');
     amount = euro(t.type === 'income' ? t.amount : -t.amount, { sign: true });
     cls = t.type === 'income' ? 'pos' : 'neg';
   }
   return `
     <button class="row" data-tx="${esc(t.id)}">
-      <span class="row-icon" style="--c:${esc(color)}">${esc(icon)}</span>
+      ${chip}
       <span class="row-main">
         <span class="row-title">${esc(title)}</span>
-        <span class="row-sub">${esc(sub)}</span>
+        <span class="row-sub">${t.toReview ? '<span class="badge warn">da rivedere</span> ' : ''}${esc(sub)}</span>
       </span>
       <span class="row-amount ${cls}">${amount}</span>
     </button>`;
@@ -60,6 +65,31 @@ export function budgetBar(spent, budget) {
   </div>`;
 }
 
-export function emptyState(icon, text, action = '') {
-  return `<div class="empty"><span class="empty-icon">${icon}</span><p>${text}</p>${action}</div>`;
+/** Stato vuoto: icona, una frase che spiega, e se serve un pulsante per iniziare. */
+export function emptyState(iconName, title, text = '', action = '') {
+  return `<div class="empty">
+    <span class="empty-icon">${icon(iconName)}</span>
+    <p class="empty-title">${title}</p>
+    ${text ? `<p class="empty-text">${text}</p>` : ''}
+    ${action}
+  </div>`;
+}
+
+/** Riga di navigazione (Impostazioni e simili). tone: colore dell'icona. */
+export function navRow({ href, id, iconName, title, sub = '', tone = 'primary', danger = false, tag = 'a', attrs = '' }) {
+  const open = tag === 'a' ? `<a class="row" href="${href}" ${attrs}>` : `<${tag} class="row ${danger ? 'danger' : ''}" ${id ? `id="${id}"` : ''} ${attrs}>`;
+  return `${open}
+      <span class="row-icon tone-${danger ? 'danger' : tone}">${icon(iconName)}</span>
+      <span class="row-main"><span class="row-title">${title}</span>${sub ? `<span class="row-sub">${sub}</span>` : ''}</span>
+      ${tag === 'a' ? `<span class="row-chevron">${icon('chevron-right')}</span>` : ''}
+    </${tag}>`;
+}
+
+/** Intestazione di pagina con link "indietro" opzionale e azioni a destra. */
+export function pageHeader(title, { back = null, actions = '', sub = '' } = {}) {
+  return `<header class="page-header">
+    ${back ? `<a class="back" href="${back.href}">${icon('chevron-left')}${back.label}</a>` : ''}
+    <div class="page-title-row"><h1>${title}</h1>${actions ? `<div class="page-actions">${actions}</div>` : ''}</div>
+    ${sub ? `<p class="page-sub">${sub}</p>` : ''}
+  </header>`;
 }

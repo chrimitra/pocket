@@ -3,6 +3,8 @@ import { esc, euro, parseISODate } from '../format.js';
 import { balances } from '../store.js';
 import { refresh, state } from '../state.js';
 import { runSync } from '../sync.js';
+import { pageHeader } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
 
 export const title = 'Banca';
@@ -24,7 +26,7 @@ export async function render(el, data) {
       .join('');
 
   el.innerHTML = `
-    <header class="page-header"><a class="back" href="#/altro">‹ Impostazioni</a><h1>Collegamento banca</h1></header>
+    ${pageHeader('Collegamento banca', { back: { href: '#/altro', label: 'Impostazioni' }, sub: 'Facoltativo: scarica i movimenti da solo' })}
 
     ${
       !configured
@@ -42,7 +44,7 @@ export async function render(el, data) {
         return `
         <section class="card bank-card">
           <div class="bank-head">
-            <span class="bank-logo">🏤</span>
+            <span class="row-icon tone-primary">${icon('bank')}</span>
             <div class="row-main"><span class="row-title">${esc(c.aspsp?.name ?? 'Banca')}</span>
               <span class="row-sub ${warn ? (expired ? 'neg' : 'warn-text') : ''}">${
                 left === null
@@ -75,23 +77,23 @@ export async function render(el, data) {
             })
             .join('')}
           <div class="bank-actions">
-            <button type="button" class="btn ${expired ? 'secondary' : 'primary'}" data-sync ${expired ? 'disabled' : ''}>Aggiorna ora</button>
-            <button type="button" class="btn ${warn ? 'primary' : 'secondary'}" data-renew="${esc(c.sessionId)}">Rinnova</button>
+            <button type="button" class="btn ${expired ? 'secondary' : 'primary'}" data-sync ${expired ? 'disabled' : ''}>${icon('refresh')}Aggiorna ora</button>
+            <button type="button" class="btn ${warn ? 'primary' : 'secondary'}" data-renew="${esc(c.sessionId)}">${icon('shield')}Rinnova</button>
           </div>
-          <button type="button" class="btn danger block" data-unlink="${esc(c.sessionId)}">Scollega</button>
+          <button type="button" class="btn danger-text block" data-unlink="${esc(c.sessionId)}">Scollega</button>
         </section>`;
       })
       .join('')}
 
-    ${configured ? `<button type="button" class="btn ${cfg.connections.length ? 'secondary' : 'primary'} block" id="link">${cfg.connections.length ? '+ Collega un altro conto' : 'Collega BancoPosta'}</button>` : ''}
+    ${configured ? `<button type="button" class="btn ${cfg.connections.length ? 'secondary' : 'primary'} block" id="link">${icon('link')}${cfg.connections.length ? 'Collega un altro conto' : 'Collega BancoPosta'}</button>` : ''}
 
     <h2 class="section-title">Server</h2>
     <section class="card flush rows">
       <button class="row" id="server">
-        <span class="row-icon">🔐</span>
+        <span class="row-icon tone-neutral">${icon('shield')}</span>
         <span class="row-main"><span class="row-title">${configured ? 'Server configurato' : 'Configura il server'}</span>
           <span class="row-sub">${configured ? esc(new URL(cfg.serverUrl).host) : 'Indirizzo della funzione e chiave di accesso'}</span></span>
-        <span class="row-chevron" aria-hidden="true">›</span>
+        <span class="row-chevron">${icon('chevron-right')}</span>
       </button>
     </section>
     <p class="footnote">Tasca può solo <strong>leggere</strong> saldo e movimenti: non può fare pagamenti. Il consenso dura al massimo 180 giorni, poi va rinnovato con PosteID.<br>Indirizzo da registrare su Enable Banking: <strong>${esc(redirectUrl())}</strong></p>`;
@@ -144,8 +146,8 @@ function openServerSheet(cfg) {
         <label class="field"><span>Chiave</span><input id="s-token" type="password" autocomplete="off" placeholder="La password scelta (TASCA_TOKEN)" value="${esc(cfg.token)}"></label>
       </div>
       <p class="hint-text">Li trovi alla fine della guida GUIDA-BANCA.md. Toccando Salva, Tasca prova subito il collegamento.</p>
-      <p class="form-error" hidden></p>
-      <button type="button" class="btn primary block" id="s-save">Salva e prova</button>`,
+      <p class="form-error" hidden></p>`,
+    footer: '<button type="button" class="btn primary block" id="s-save">Salva e prova</button>',
     onMount(el, close) {
       el.querySelector('#s-save').addEventListener('click', async (e) => {
         const url = el.querySelector('#s-url').value.trim();
@@ -200,8 +202,8 @@ async function openLinkSheet(data) {
         <li>Alla fine tornerai qui e i movimenti verranno scaricati.</li>
       </ol>
       <p class="hint-text">Tasca non vede mai le tue credenziali di Poste: l'accesso avviene sulle loro pagine ufficiali.</p>
-      <p class="form-error" hidden></p>
-      <button type="button" class="btn primary block" id="l-go">Continua su Poste</button>`,
+      <p class="form-error" hidden></p>`,
+    footer: '<button type="button" class="btn primary block" id="l-go">Continua su Poste</button>',
     onMount(el) {
       el.querySelector('#l-go').addEventListener('click', async (e) => {
         e.target.disabled = true;

@@ -1,7 +1,8 @@
 // Service worker: rende l'app disponibile offline.
-// Strategia "stale-while-revalidate": risponde subito dalla cache e aggiorna in background,
-// quindi una nuova versione pubblicata compare alla riapertura successiva.
-const CACHE = 'tasca-v7';
+// Strategia "stale-while-revalidate": risponde subito dalla cache e aggiorna in background.
+// A ogni pubblicazione si alza CACHE: il nuovo service worker scarica tutti i file aggiornati
+// e l'app propone di ricaricare.
+const CACHE = 'tasca-v8';
 const SHELL = [
   './',
   'index.html',
@@ -9,20 +10,22 @@ const SHELL = [
   'css/app.css',
   'js/analytics.js',
   'js/app.js',
-  'js/bank.js',
   'js/bank-sync.js',
-  'js/sync.js',
-  'js/theme.js',
+  'js/bank.js',
   'js/db.js',
   'js/format.js',
   'js/import/detect.js',
   'js/import/files.js',
   'js/import/plan.js',
+  'js/insights.js',
   'js/rules.js',
   'js/state.js',
   'js/store.js',
+  'js/sync.js',
+  'js/theme.js',
   'js/ui/charts.js',
   'js/ui/components.js',
+  'js/ui/icons.js',
   'js/ui/sheet.js',
   'js/ui/transaction-sheet.js',
   'js/views/altro.js',
@@ -30,10 +33,10 @@ const SHELL = [
   'js/views/budget.js',
   'js/views/conti.js',
   'js/views/grafici.js',
-  'js/views/importa.js',
-  'js/views/regole.js',
   'js/views/home.js',
+  'js/views/importa.js',
   'js/views/movimenti.js',
+  'js/views/regole.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -41,7 +44,13 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' scavalca la cache del browser: così non salviamo per sbaglio file vecchi.
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(SHELL.map((url) => new Request(url, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (event) => {

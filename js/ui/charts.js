@@ -112,7 +112,7 @@ function interact(svg, count, indexAt, show, hide) {
  * Linea singola (es. saldo nel tempo).
  * points: [{ value (centesimi), label (per il tooltip), tick (etichetta asse X o '') }]
  */
-export function lineChart(container, { points, format, height = 210, ariaLabel }) {
+export function lineChart(container, { points, format, height = 230, ariaLabel }) {
   const values = points.map((p) => p.value / 100);
   const ticks = niceTicks(Math.min(...values), Math.max(...values));
   const { svg, plot, y, tip, width } = frame(container, height, ticks);
@@ -162,7 +162,7 @@ export function lineChart(container, { points, format, height = 210, ariaLabel }
  * groups: [{ tick, label, values: [centesimi per serie], extra?: string }]
  * series: [{ name, cls }]  — cls è la classe colore (s1, s2)
  */
-export function columnChart(container, { groups, series, format, height = 220, ariaLabel }) {
+export function columnChart(container, { groups, series, format, height = 230, ariaLabel }) {
   const max = Math.max(0, ...groups.flatMap((g) => g.values)) / 100;
   const ticks = niceTicks(0, max || 1);
   const { svg, plot, y, tip, width } = frame(container, height, ticks);

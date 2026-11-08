@@ -23,7 +23,8 @@ const STOP_WORDS = new Set(
   `PAGAMENTO PAGAMENTI POS CARTA CARTE DEBITO CREDITO EUR EURO DEL DELLA DELLE DEI ALLE ORE ADDEBITO ADDEBITI ACCREDITO
   BONIFICO BONIFICI SEPA SDD SCT DISPOSIZIONE OPERAZIONE PRESSO ITA ITALIA VIA NUM TRAMITE APP ONLINE INTERNET
   COMMISSIONE COMMISSIONI FAVORE ORDINE RIF CRO TRN BENEF BENEFICIARIO MANDATO DIRETTO CONTACTLESS MASTERCARD VISA
-  MAESTRO POSTAMAT BANCOPOSTA POSTEPAY DATA VALUTA ESEGUITO EFFETTUATO CON PER DA AL ALLA SU SRL SPA SNC SAS`.split(/\s+/),
+  MAESTRO POSTAMAT BANCOPOSTA POSTEPAY DATA VALUTA ESEGUITO EFFETTUATO CON PER DA AL ALLA SU SRL SPA SNC SAS
+  VOSTRO NOSTRO VS NS IL LA LE LO GLI DI IN PAG OP ID REF NR`.split(/\s+/),
 );
 
 export function normalizeText(s) {
@@ -82,8 +83,32 @@ export function accountRules(accounts, excludeAccountId) {
 }
 
 // Tutte le regole valide per i movimenti di un conto, nell'ordine in cui vanno provate.
+// Un trasferimento verso lo stesso conto, o verso un conto eliminato o archiviato, non vale.
 export function rulesForAccount(rules, accounts, accountId) {
-  return [...rules.filter((r) => !(r.action === 'transfer' && r.accountId === accountId)), ...accountRules(accounts, accountId)].sort(ruleOrder);
+  const usable = new Set(accounts.filter((a) => !a.archived && a.id !== accountId).map((a) => a.id));
+  return [...rules.filter((r) => r.action !== 'transfer' || usable.has(r.accountId)), ...accountRules(accounts, accountId)].sort(ruleOrder);
+}
+
+/**
+ * Rende leggibile la descrizione della banca:
+ * "PAGAMENTO POS ESSELUNGA MILANO CARTA 1234" → "Esselunga Milano".
+ * Le note scritte da te (non tutte maiuscole) restano come sono.
+ */
+export function prettyDescription(text) {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  const letters = clean.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  const upper = letters.replace(/[^A-ZÀ-Þ]/g, '');
+  if (!letters || upper.length / letters.length < 0.8) return clean;
+  const words = clean
+    .replace(/\*+\d*/g, ' ')
+    .split(' ')
+    .filter((w) => {
+      const n = normalizeText(w).replace(/[^A-Z0-9&']/g, '');
+      return n.length > 1 && !STOP_WORDS.has(n) && !/^[\d.,:/-]+$/.test(w) && !/\d{3,}/.test(w);
+    });
+  if (!words.length) return clean;
+  const pretty = words.map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+  return pretty.length > 42 ? `${pretty.slice(0, 40).trim()}…` : pretty;
 }
 
 // Indovina la parola che identifica il negozio, es. "PAGAMENTO POS ESSELUNGA MILANO" → "ESSELUNGA".

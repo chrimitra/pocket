@@ -23,7 +23,9 @@ Poi apri http://localhost:5173.
 - `js/views/`: le schermate (Home, Movimenti, Budget, Grafici, Conti, Impostazioni)
 - `js/analytics.js`, `js/ui/charts.js`: calcoli e grafici SVG (nessuna libreria esterna)
 - `js/import/`: lettura dei file (xlsx, csv, html), riconoscimento colonne, revisione e doppioni
-- `js/rules.js`: regole automatiche "descrizione contiene X → categoria Y"
+- `js/rules.js`: regole automatiche "descrizione contiene X → categoria Y" e descrizioni leggibili
+- `js/insights.js`: frasi che spiegano i numeri ("questo mese hai speso meno del solito…")
+- `js/ui/icons.js`: set di icone a linea; `js/ui/transaction-sheet.js`: inserimento con tastierino
 - `js/bank.js`, `js/bank-sync.js`, `js/sync.js`: collegamento banca, abbinamento con i movimenti esistenti, aggiornamento automatico
 - `server/supabase/functions/banca/index.ts`: funzione server che firma le richieste a Enable Banking (vedi `GUIDA-BANCA.md`)
 - `js/ui/`: pannello dal basso e modulo dei movimenti
@@ -40,4 +42,5 @@ Gli importi sono salvati in centesimi interi, così i calcoli non hanno errori d
 - [x] Fase 3 – Grafici: saldo nel tempo, entrate/uscite per mese, spese per categoria, medie
 - [x] Fase 4 – Import da file (Excel .xlsx, CSV) di BancoPosta e Revolut, con regole automatiche e anti-doppioni
 - [x] Fase 5 – Collegamento BancoPosta via Enable Banking (codice pronto; da configurare con GUIDA-BANCA.md)
-- [ ] Fase 6 – Login, sincronizzazione cloud (Supabase), pubblicazione
+- [x] Versione 1.0 – nuovo design (colori, icone, SF Pro Rounded), tastierino per l'importo, etichette parlanti, correzioni
+- [ ] Fase 6 – Login e sincronizzazione cloud (Supabase)

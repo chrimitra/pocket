@@ -3,7 +3,8 @@ import {
 } from '../format.js';
 import { averageSpending, budgetStatus, deleteGoal, saveCategories, saveGoal } from '../store.js';
 import { refresh, state } from '../state.js';
-import { budgetBar, emptyState } from '../ui/components.js';
+import { budgetBar, emptyState, pageHeader } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
 
 export const title = 'Budget';
@@ -20,40 +21,42 @@ export function render(el, data) {
     const daysLeft = daysInMonth(ui.ym) - new Date().getDate() + 1;
     pace =
       left > 0
-        ? `Puoi spendere circa <strong>${euro(Math.floor(left / daysLeft))}</strong> al giorno per i prossimi ${daysLeft} ${daysLeft === 1 ? 'giorno' : 'giorni'}.`
-        : 'Hai già usato tutto il budget del mese.';
+        ? `Vuol dire circa <strong>${euro(Math.floor(left / daysLeft))} al giorno</strong> per ${daysLeft === 1 ? "l'ultimo giorno" : `i prossimi ${daysLeft} giorni`}.`
+        : 'Hai già usato tutto il budget del mese: da qui in poi ogni spesa lo supera.';
   }
 
   el.innerHTML = `
-    <header class="page-header"><h1>Budget</h1></header>
+    ${pageHeader('Budget', { sub: 'Quanto vuoi spendere, e quanto ti resta' })}
     <div class="month-nav">
-      <button class="icon-btn" data-shift="-1" aria-label="Mese precedente">‹</button>
+      <button class="icon-btn" data-shift="-1" aria-label="Mese precedente">${icon('chevron-left')}</button>
       <strong>${monthLabel(ui.ym)}</strong>
-      <button class="icon-btn" data-shift="1" aria-label="Mese successivo">›</button>
+      <button class="icon-btn" data-shift="1" aria-label="Mese successivo">${icon('chevron-right')}</button>
     </div>
 
     ${
       totalBudget > 0
         ? `<section class="card">
-            <div class="budget-total">
-              <div><span class="muted">Speso</span><strong>${euro(totalSpent)}</strong></div>
-              <div class="right"><span class="muted">${left >= 0 ? 'Rimangono' : 'Sforato di'}</span><strong class="${left < 0 ? 'neg' : ''}">${euro(Math.abs(left))}</strong></div>
-            </div>
+            <p class="budget-headline">${
+              left >= 0
+                ? `${isCurrent ? 'Puoi ancora spendere' : 'Ti sono avanzati'} <strong>${euro(left)}</strong>`
+                : `Hai sforato di <strong class="neg">${euro(-left)}</strong>`
+            }</p>
             ${budgetBar(totalSpent, totalBudget)}
-            <p class="muted small">Budget totale ${euro(totalBudget)}</p>
-            ${pace ? `<p class="pace">${pace}</p>` : ''}
+            <p class="muted small">${euro(totalSpent)} spesi su ${euro(totalBudget)} di budget</p>
+            ${pace ? `<p class="pace">${icon('info')}<span>${pace}</span></p>` : ''}
           </section>
 
           <section class="card flush rows">
             ${rows.map((r) => budgetRow(r.category, r.spent, r.budget)).join('')}
           </section>`
         : `<section class="card">${emptyState(
-            '🎯',
+            'target',
+            'Nessun budget impostato',
             'Decidi quanto vuoi spendere al mese per ogni categoria: Tasca ti avvisa quando ti avvicini al limite.',
           )}</section>`
     }
 
-    <button class="btn ${totalBudget > 0 ? 'secondary' : 'primary'} block" id="edit-budgets">${totalBudget > 0 ? 'Modifica budget' : 'Imposta i budget'}</button>
+    <button class="btn ${totalBudget > 0 ? 'secondary' : 'primary'} block" id="edit-budgets">${icon(totalBudget > 0 ? 'note' : 'target')}${totalBudget > 0 ? 'Modifica i budget' : 'Imposta i budget'}</button>
 
     ${
       unbudgeted.length
@@ -63,8 +66,8 @@ export function render(el, data) {
               .map(
                 ({ category: c, spent }) => `
               <button class="row" data-budget-cat>
-                <span class="row-icon" style="--c:${esc(c.color)}">${esc(c.icon)}</span>
-                <span class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">Tocca per impostare un budget</span></span>
+                <span class="row-icon emoji" style="--c:${esc(c.color)}">${esc(c.icon)}</span>
+                <span class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">Nessun limite · tocca per impostarlo</span></span>
                 <span class="row-amount">${euro(spent)}</span>
               </button>`,
               )
@@ -74,8 +77,12 @@ export function render(el, data) {
     }
 
     <h2 class="section-title">Obiettivi di risparmio</h2>
-    ${data.goals.length ? `<div class="goals">${data.goals.map(goalCard).join('')}</div>` : ''}
-    <button class="btn secondary block" id="add-goal">+ Nuovo obiettivo</button>`;
+    ${
+      data.goals.length
+        ? `<div class="goals">${data.goals.map(goalCard).join('')}</div>`
+        : `<p class="hint-text">Stai mettendo da parte soldi per qualcosa (una vacanza, un telefono nuovo)? Crea un obiettivo e segui i progressi.</p>`
+    }
+    <button class="btn secondary block" id="add-goal">${icon('flag')}Nuovo obiettivo</button>`;
 
   el.querySelectorAll('[data-shift]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -95,21 +102,21 @@ function budgetRow(c, spent, budget) {
   const left = budget - spent;
   return `
     <div class="budget-row">
-      <span class="row-icon" style="--c:${esc(c.color)}">${esc(c.icon)}</span>
+      <span class="row-icon emoji" style="--c:${esc(c.color)}">${esc(c.icon)}</span>
       <div class="budget-main">
         <div class="budget-line">
           <span class="row-title">${esc(c.name)}</span>
           <span class="budget-nums"><strong>${euro(spent)}</strong> <span class="muted">/ ${euro(budget)}</span></span>
         </div>
         ${budgetBar(spent, budget)}
-        <span class="row-sub ${left < 0 ? 'neg' : ''}">${left >= 0 ? `Rimangono ${euro(left)}` : `Sforato di ${euro(-left)}`}</span>
+        <span class="row-sub ${left < 0 ? 'neg' : ''}">${left >= 0 ? `Ancora ${euro(left)} da spendere` : `Sforato di ${euro(-left)}`}</span>
       </div>
     </div>`;
 }
 
 function goalPlan(g) {
   const missing = g.target - g.saved;
-  if (missing <= 0) return 'Obiettivo raggiunto! 🎉';
+  if (missing <= 0) return 'Obiettivo raggiunto!';
   if (!g.deadline) return `Mancano ${euro(missing)}`;
   const days = (parseISODate(g.deadline) - parseISODate(toISODate())) / 864e5;
   if (days < 0) return `Mancano ${euro(missing)} · scadenza superata`;
@@ -138,7 +145,7 @@ function openBudgetSheet(ym) {
   openSheet({
     title: 'Budget mensili',
     body: `
-      <p class="hint-text">Quanto vuoi spendere al mese per ogni categoria. Lascia vuoto per non avere limiti. Il valore in grigio è la tua spesa media degli ultimi mesi.</p>
+      <p class="hint-text">Scrivi quanto vuoi spendere al mese per ogni categoria; lascia vuoto per non mettere limiti. Il numero in grigio è quanto spendi di solito.</p>
       <div class="fields">
         ${list
           .map((c) => {
@@ -152,8 +159,8 @@ function openBudgetSheet(ym) {
           })
           .join('')}
       </div>
-      <p class="form-error" hidden></p>
-      <button type="button" class="btn primary block" id="b-save">Salva</button>`,
+      <p class="form-error" hidden></p>`,
+    footer: '<button type="button" class="btn primary block" id="b-save">Salva i budget</button>',
     onMount(el, close) {
       el.querySelector('#b-save').addEventListener('click', async () => {
         const updated = [];
@@ -184,10 +191,11 @@ function openGoalSheet(goal) {
         goal
           ? `<div class="goal-move">
               <input id="g-move" inputmode="decimal" placeholder="Importo" aria-label="Importo da aggiungere o togliere">
-              <button type="button" class="btn secondary" data-move="-1">− Togli</button>
-              <button type="button" class="btn primary" data-move="1">+ Aggiungi</button>
+              <button type="button" class="btn secondary" data-move="-1">Togli</button>
+              <button type="button" class="btn primary" data-move="1">Aggiungi</button>
             </div>
-            <p class="hint-text">Messi da parte finora: <strong>${euro(goal.saved)}</strong> di ${euro(goal.target)}.</p>`
+            <p class="hint-text">Hai messo da parte <strong>${euro(goal.saved)}</strong> su ${euro(goal.target)}. Scrivi un importo e tocca <strong>Aggiungi</strong> quando ne metti da parte altri.</p>
+            <p class="field-label">Modifica l'obiettivo</p>`
           : ''
       }
       <div class="fields">
@@ -199,8 +207,8 @@ function openGoalSheet(goal) {
       </div>
       <p class="hint-text">La data è facoltativa: se la indichi, Tasca calcola quanto mettere da parte ogni mese.</p>
       <p class="form-error" hidden></p>
-      <button type="button" class="btn ${goal ? 'secondary' : 'primary'} block" id="g-save">${goal ? 'Salva modifiche' : 'Crea obiettivo'}</button>
-      ${goal ? '<button type="button" class="btn danger block" id="g-delete">Elimina obiettivo</button>' : ''}`,
+      ${goal ? `<button type="button" class="btn danger-text block" id="g-delete">${icon('trash')}Elimina obiettivo</button>` : ''}`,
+    footer: `<button type="button" class="btn ${goal ? 'secondary' : 'primary'} block" id="g-save">${goal ? 'Salva modifiche' : 'Crea obiettivo'}</button>`,
     onMount(el, close) {
       el.querySelectorAll('[data-move]').forEach((b) =>
         b.addEventListener('click', async () => {
@@ -222,11 +230,11 @@ function openGoalSheet(goal) {
         if (!name) return showError(el, "Dai un nome all'obiettivo");
         if (!(target > 0)) return showError(el, "Inserisci quanto vuoi mettere da parte");
         if (!(saved >= 0)) return showError(el, 'Importo già da parte non valido');
-        const icon = el.querySelector('#g-icon').value.trim();
+        const emoji = el.querySelector('#g-icon').value.trim();
         await saveGoal({
           ...goal,
           name,
-          icon: firstGrapheme(icon) || '🎯',
+          icon: firstGrapheme(emoji) || '🎯',
           target,
           saved,
           deadline: el.querySelector('#g-deadline').value || null,

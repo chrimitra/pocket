@@ -5,7 +5,9 @@ import { buildPlan, targetFromRule, toTransactions } from '../import/plan.js';
 import { guessKeyword, ruleMatches } from '../rules.js';
 import { saveRule, saveTransactions } from '../store.js';
 import { refresh, state } from '../state.js';
-import { toast } from '../ui/sheet.js';
+import { pageHeader } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
+import { openSheet, showError, toast } from '../ui/sheet.js';
 
 export const title = 'Importa';
 
@@ -43,29 +45,31 @@ export function render(el, data) {
   const chosen = accounts.find((a) => a.id === ui.accountId);
 
   el.innerHTML = `
-    <header class="page-header"><a class="back" href="#/movimenti">‹ Movimenti</a><h1>Importa movimenti</h1></header>
+    ${pageHeader('Importa movimenti', { back: { href: '#/movimenti', label: 'Movimenti' }, sub: 'Dal file Excel della tua banca, senza doppioni' })}
 
     <section class="card import-start">
-      <ol class="steps">
-        <li><strong>BancoPosta:</strong> su <strong>poste.it</strong> (da Safari) apri la lista movimenti e scegli <strong>Scarica Excel</strong>.<br>
-          <strong>Revolut:</strong> nell'app apri il conto in euro → <strong>…</strong> → <strong>Estratto conto</strong> → formato <strong>Excel</strong>.</li>
-        <li>Scegli qui sotto il conto e il file scaricato.</li>
-        <li>Controlla le categorie e tocca <strong>Importa</strong>. I movimenti già presenti vengono saltati.</li>
-      </ol>
+      <details class="howto" ${ui.rows ? '' : 'open'}>
+        <summary>${icon('info')}Dove trovo il file?</summary>
+        <ul class="howto-list">
+          <li><strong>BancoPosta:</strong> da Safari vai su <strong>poste.it</strong>, apri la lista movimenti del conto e tocca <strong>Scarica Excel</strong>.</li>
+          <li><strong>Revolut:</strong> nell'app apri il conto in euro → <strong>…</strong> → <strong>Estratto conto</strong> → formato <strong>Excel</strong>.</li>
+        </ul>
+        <p class="muted small">Il file finisce nell'app File. I movimenti già presenti in Tasca vengono riconosciuti e saltati.</p>
+      </details>
       <div class="fields">
-        <label class="field"><span>Conto</span><select id="imp-account">
+        <label class="field"><span>Nel conto</span><select id="imp-account">
           ${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === ui.accountId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
         </select></label>
       </div>
       <label class="btn ${ui.rows ? 'secondary' : 'primary'} block file-btn">
-        ${ui.rows ? `Cambia file · ${esc(ui.fileName)}` : 'Scegli il file (Excel o CSV)'}
+        ${icon(ui.rows ? 'refresh' : 'file')}<span>${ui.rows ? `Cambia file · ${esc(ui.fileName)}` : 'Scegli il file (Excel o CSV)'}</span>
         <input type="file" id="imp-file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
       </label>
       ${ui.error ? `<p class="form-error">${esc(ui.error)}</p>` : ''}
       ${
         ui.revolut
           ? REVOLUT_NAME.test(chosen?.name ?? '')
-            ? '<p class="hint-text">✓ Estratto conto Revolut riconosciuto: importo solo le operazioni completate in euro, commissioni comprese.</p>'
+            ? `<p class="hint-text ok">${icon('check')} Estratto conto Revolut riconosciuto: importo solo le operazioni completate in euro, commissioni comprese.</p>`
             : '<p class="form-error">Questo sembra un estratto conto Revolut: scegli il conto Revolut qui sopra. Se non ce l\'hai, crealo in Impostazioni → Conti con un nome che contenga "Revolut".</p>'
           : ''
       }
@@ -250,15 +254,11 @@ function bindReview(el, data) {
   el.querySelectorAll('[data-remember]').forEach((b) =>
     b.addEventListener('click', async () => {
       const item = items[b.dataset.remember];
-      const keyword = prompt('Quando la descrizione contiene questa parola, usa la stessa scelta:', guessKeyword(item.description))?.trim();
+      const keyword = await askKeyword(item.description);
       if (!keyword) return;
       const rule = item.target.startsWith('t:')
         ? { keyword, action: 'transfer', accountId: item.target.slice(2) }
         : { keyword, action: 'category', categoryId: item.target.slice(2) };
-      if (!ruleMatches(rule, item.description)) {
-        alert(`«${keyword}» non compare nella descrizione di questo movimento.`);
-        return;
-      }
       await saveRule(rule);
       // Applica subito la regola alle altre righe dello stesso tipo (entrata/uscita) non modificate a mano.
       let applied = 0;
@@ -278,5 +278,31 @@ function bindReview(el, data) {
     toast(`${list.length} movimenti importati`);
     location.hash = '#/movimenti';
     await refresh();
+  });
+}
+
+// Chiede la parola chiave per una nuova regola, proponendo quella più probabile.
+function askKeyword(description) {
+  return new Promise((resolve) => {
+    let answer = null;
+    openSheet({
+      title: 'Ricorda questa scelta',
+      body: `
+        <p class="hint-text">Da ora in poi, i movimenti la cui descrizione contiene questa parola riceveranno la stessa categoria.</p>
+        <div class="fields"><label class="field"><span>Parola</span><input id="k-word" autocapitalize="characters" value="${esc(guessKeyword(description))}"></label></div>
+        <p class="bank-desc plain">${icon('file')}<span>${esc(description)}</span></p>
+        <p class="form-error" hidden></p>`,
+      footer: '<button type="button" class="btn primary block" id="k-save">Ricorda</button>',
+      onClose: () => resolve(answer),
+      onMount(el, close) {
+        el.querySelector('#k-save').addEventListener('click', () => {
+          const word = el.querySelector('#k-word').value.trim();
+          if (!word) return showError(el, 'Scrivi una parola');
+          if (!ruleMatches({ keyword: word }, description)) return showError(el, `«${word}» non compare nella descrizione di questo movimento`);
+          answer = word;
+          close();
+        });
+      },
+    });
   });
 }

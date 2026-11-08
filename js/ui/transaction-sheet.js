@@ -1,10 +1,20 @@
-// Modulo per creare o modificare un movimento (uscita, entrata, trasferimento).
-import { amountToInput, esc, euro, parseAmount, toISODate } from '../format.js';
-import { guessKeyword, ruleMatches } from '../rules.js';
+// Inserimento e modifica di un movimento, con tastierino numerico integrato:
+// la tastiera dell'iPhone non compare per l'importo, quindi non copre più nulla.
+import { esc, euro, parseISODate, toISODate } from '../format.js';
+import { guessKeyword, prettyDescription, ruleMatches } from '../rules.js';
 import { budgetLevel, deleteTransaction, monthSummary, saveRule, saveTransaction, saveTransactions } from '../store.js';
 import { refresh, state } from '../state.js';
+import { icon } from './icons.js';
 import { openSheet, showError, toast } from './sheet.js';
 
+const TYPES = {
+  expense: { label: 'Spesa', save: 'Salva spesa', saved: 'Spesa salvata', sign: '−' },
+  income: { label: 'Entrata', save: 'Salva entrata', saved: 'Entrata salvata', sign: '+' },
+  transfer: { label: 'Trasferimento', save: 'Salva trasferimento', saved: 'Trasferimento salvato', sign: '' },
+};
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'back'];
+const MAX_INT_DIGITS = 7;
+const USAGE_DAYS = 120;
 const LAST_ACCOUNT_KEY = 'tasca:lastAccount';
 
 function lastAccount() {
@@ -23,6 +33,44 @@ function rememberAccount(id) {
   }
 }
 
+// Le categorie che usi di più compaiono per prime: quella che cerchi è quasi sempre in alto.
+function byUsage(list, transactions) {
+  const since = toISODate(new Date(Date.now() - USAGE_DAYS * 864e5));
+  const uses = new Map();
+  for (const t of transactions) if (t.categoryId && t.date >= since) uses.set(t.categoryId, (uses.get(t.categoryId) || 0) + 1);
+  return [...list].sort((a, b) => (uses.get(b.id) || 0) - (uses.get(a.id) || 0) || (a.order ?? 0) - (b.order ?? 0));
+}
+
+// L'importo si scrive come su una calcolatrice: "12,5" vale 12,50 €.
+function rawToCents(raw) {
+  if (!raw) return 0;
+  const [int, dec = ''] = raw.split(',');
+  return Number(int || 0) * 100 + Number(`${dec}00`.slice(0, 2));
+}
+
+function centsToRaw(cents) {
+  const int = String(Math.floor(cents / 100));
+  const dec = String(cents % 100).padStart(2, '0');
+  return dec === '00' ? int : `${int},${dec.replace(/0$/, '')}`;
+}
+
+function formatRaw(raw) {
+  if (!raw) return '0';
+  const [int, dec] = raw.split(',');
+  const grouped = Number(int || 0).toLocaleString('it-IT', { useGrouping: 'always' });
+  return dec === undefined ? grouped : `${grouped},${dec}`;
+}
+
+function dateLabel(iso) {
+  const today = toISODate();
+  if (iso === today) return 'Oggi';
+  if (iso === toISODate(new Date(Date.now() - 864e5))) return 'Ieri';
+  const d = parseISODate(iso);
+  const opts = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return new Intl.DateTimeFormat('it-IT', opts).format(d);
+}
+
 // Dopo una spesa: avvisa se la sua categoria è oltre l'80% del budget del mese.
 function budgetAlert(categoryId, ym) {
   const category = state.data.categories.find((c) => c.id === categoryId);
@@ -34,12 +82,12 @@ function budgetAlert(categoryId, ym) {
   const message =
     level === 'over'
       ? `Budget «${category.name}» superato di ${euro(spent - category.budget)}`
-      : `«${category.name}»: ${Math.round((spent / category.budget) * 100)}% del budget usato`;
+      : `«${category.name}»: hai usato il ${Math.round((spent / category.budget) * 100)}% del budget`;
   return { level, message };
 }
 
 export function openTransactionSheet(tx = null) {
-  const { accounts, categories } = state.data;
+  const { accounts, categories, transactions } = state.data;
   const usable = accounts.filter((a) => !a.archived || a.id === tx?.accountId || a.id === tx?.toAccountId);
   if (!usable.length) {
     toast('Crea prima un conto');
@@ -49,56 +97,116 @@ export function openTransactionSheet(tx = null) {
 
   let type = tx?.type ?? 'expense';
   let categoryId = tx?.categoryId ?? null;
+  let raw = tx ? centsToRaw(tx.amount) : '';
   const defaultAccount = usable.some((a) => a.id === lastAccount()) ? lastAccount() : usable[0].id;
   const fromId = tx?.accountId ?? defaultAccount;
   const toId = tx?.toAccountId ?? usable.find((a) => a.id !== fromId)?.id ?? fromId;
   const options = (selected) =>
     usable.map((a) => `<option value="${esc(a.id)}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
+  const bankText = tx?.bankDescription ?? (tx?.source === 'import' ? tx.note : null);
+
+  const top = `
+    <div class="segmented type-switch" role="radiogroup" aria-label="Tipo di movimento">
+      ${Object.entries(TYPES)
+        .map(([k, v]) => `<button type="button" role="radio" data-type="${k}">${v.label}</button>`)
+        .join('')}
+    </div>
+    <div class="amount-display" id="f-amount" role="status" aria-live="polite">
+      <span class="amount-sign"></span><span class="amount-value"></span><span class="amount-caret" aria-hidden="true"></span><span class="amount-cur">€</span>
+    </div>
+    <div class="detail-chips">
+      <label class="chip-select">
+        ${icon('wallet')}<span class="chip-text" id="v-from"></span>${icon('chevron-down', 'chev')}
+        <select id="f-from" aria-label="Conto">${options(fromId)}</select>
+      </label>
+      <label class="chip-select" id="c-to">
+        ${icon('transfer')}<span class="chip-text" id="v-to"></span>${icon('chevron-down', 'chev')}
+        <select id="f-to" aria-label="Conto di destinazione">${options(toId)}</select>
+      </label>
+      <label class="chip-select" id="c-date">
+        ${icon('calendar')}<span class="chip-text" id="v-date"></span>${icon('chevron-down', 'chev')}
+        <input type="date" id="f-date" value="${esc(tx?.date ?? toISODate())}" aria-label="Data">
+      </label>
+      <button type="button" class="chip-select" id="c-note">${icon('note')}<span class="chip-text" id="v-note"></span></button>
+    </div>
+    <div class="note-box" hidden>
+      <input id="f-note" maxlength="140" enterkeyhint="done" placeholder="Es. pizza con gli amici" value="${esc(tx?.note ?? '')}" aria-label="Nota">
+    </div>`;
 
   const body = `
-    <div class="segmented" role="radiogroup" aria-label="Tipo di movimento">
-      <button type="button" role="radio" data-type="expense">Uscita</button>
-      <button type="button" role="radio" data-type="income">Entrata</button>
-      <button type="button" role="radio" data-type="transfer">Trasferimento</button>
-    </div>
-    <label class="amount-field">
-      <span class="amount-sign" aria-hidden="true">−</span>
-      <input id="f-amount" inputmode="decimal" placeholder="0,00" autocomplete="off" aria-label="Importo in euro"
-        value="${tx ? amountToInput(tx.amount) : ''}">
-      <span class="amount-currency">€</span>
-    </label>
-    <div class="cat-grid" id="f-cats" role="radiogroup" aria-label="Categoria"></div>
-    <div class="fields">
-      <label class="field"><span id="l-from">Conto</span><select id="f-from">${options(fromId)}</select></label>
-      <label class="field" id="row-to"><span>Verso</span><select id="f-to">${options(toId)}</select></label>
-      <label class="field"><span>Data</span><input type="date" id="f-date" value="${esc(tx?.date ?? toISODate())}"></label>
-      <label class="field"><span>Nota</span><input id="f-note" maxlength="140" placeholder="Facoltativa" value="${esc(tx?.note ?? '')}"></label>
-    </div>
+    <p class="field-label" id="l-cats">Categoria</p>
+    <div class="cat-grid" id="f-cats" role="radiogroup" aria-labelledby="l-cats"></div>
     ${
-      tx?.bankDescription || tx?.source === 'import'
-        ? `<p class="bank-desc">🏦 ${esc(tx.bankDescription ?? tx.note)}</p>
+      bankText
+        ? `<div class="bank-desc">${icon('bank')}<div><strong>${esc(prettyDescription(bankText))}</strong><span>${esc(bankText)}</span></div></div>
            <label class="remember" hidden>
              <input type="checkbox" id="f-remember" checked>
              <span>Usa sempre questa categoria quando la descrizione contiene
-               <input id="f-keyword" value="${esc(guessKeyword(tx.bankDescription ?? tx.note))}" aria-label="Parola chiave"></span>
+               <input id="f-keyword" value="${esc(guessKeyword(bankText))}" aria-label="Parola chiave"></span>
            </label>`
         : ''
-    }
+    }`;
+
+  const footer = `
     <p class="form-error" hidden></p>
-    <button type="button" class="btn primary block" id="f-save">Salva</button>
-    ${tx ? '<button type="button" class="btn danger block" id="f-delete">Elimina movimento</button>' : ''}`;
+    <div class="keypad" role="group" aria-label="Tastierino importo">
+      ${KEYS.map(
+        (k) =>
+          `<button type="button" class="key" data-key="${k}" aria-label="${k === 'back' ? 'Cancella una cifra' : k === ',' ? 'Virgola' : k}">${
+            k === 'back' ? icon('backspace') : k
+          }</button>`,
+      ).join('')}
+    </div>
+    <button type="button" class="btn primary block save-btn" id="f-save"></button>`;
+
+  // Tasti del computer per l'importo: assegnato in onMount, rimosso alla chiusura.
+  let onKeyboard = () => {};
 
   openSheet({
     title: tx ? 'Modifica movimento' : 'Nuovo movimento',
+    className: 'tx-sheet',
+    actions: tx ? `<button type="button" class="icon-btn danger" id="f-delete" aria-label="Elimina movimento">${icon('trash')}</button>` : '',
+    top,
     body,
+    footer,
+    onClose: () => document.removeEventListener('keydown', onKeyboard),
     onMount(el, close) {
-      const amountInput = el.querySelector('#f-amount');
+      const $ = (s) => el.querySelector(s);
+      const noteInput = $('#f-note');
+
+      function drawAmount(shake = false) {
+        $('.amount-value').textContent = formatRaw(raw);
+        $('.amount-display').classList.toggle('empty', !raw);
+        $('.amount-sign').textContent = raw ? TYPES[type].sign : '';
+        if (shake) {
+          $('.amount-display').classList.remove('shake');
+          void $('.amount-display').offsetWidth;
+          $('.amount-display').classList.add('shake');
+        }
+      }
+
+      function press(key) {
+        if (key === 'back') raw = raw.slice(0, -1);
+        else if (key === ',') {
+          if (!raw.includes(',')) raw = `${raw || '0'},`;
+        } else {
+          const [int, dec] = raw.split(',');
+          if (dec !== undefined && dec.length >= 2) return drawAmount(true);
+          if (dec === undefined && int.replace(/^0$/, '').length >= MAX_INT_DIGITS) return drawAmount(true);
+          raw = raw === '0' ? key : raw + key;
+        }
+        showError(el, '');
+        drawAmount();
+      }
 
       function drawCategories() {
         const kind = type === 'income' ? 'income' : 'expense';
-        const list = categories.filter((c) => c.kind === kind && (!c.archived || c.id === categoryId));
+        const list = byUsage(
+          categories.filter((c) => c.kind === kind && (!c.archived || c.id === categoryId)),
+          transactions,
+        );
         if (!list.some((c) => c.id === categoryId)) categoryId = null;
-        el.querySelector('#f-cats').innerHTML = list
+        $('#f-cats').innerHTML = list
           .map(
             (c) => `
             <button type="button" role="radio" class="cat ${c.id === categoryId ? 'selected' : ''}" data-cat="${esc(c.id)}"
@@ -109,46 +217,101 @@ export function openTransactionSheet(tx = null) {
           .join('');
       }
 
+      function drawDetails() {
+        const name = (sel) => sel.selectedOptions[0]?.textContent ?? '';
+        $('#v-from').textContent = type === 'transfer' ? `Da ${name($('#f-from'))}` : name($('#f-from'));
+        $('#v-to').textContent = `A ${name($('#f-to'))}`;
+        $('#v-date').textContent = dateLabel($('#f-date').value || toISODate());
+        const note = noteInput.value.trim();
+        $('#v-note').textContent = note ? (note.length > 18 ? `${note.slice(0, 17)}…` : note) : 'Nota';
+        $('#c-note').classList.toggle('filled', Boolean(note));
+      }
+
       function setType(next) {
         type = next;
         el.querySelectorAll('[data-type]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.type === type)));
-        el.querySelector('.amount-field').dataset.type = type;
-        el.querySelector('.amount-sign').textContent = type === 'income' ? '+' : type === 'expense' ? '−' : '';
-        el.querySelector('#f-cats').hidden = type === 'transfer';
-        el.querySelector('#row-to').hidden = type !== 'transfer';
-        el.querySelector('#l-from').textContent = type === 'transfer' ? 'Da' : 'Conto';
+        $('.amount-display').dataset.type = type;
+        $('#l-cats').hidden = $('#f-cats').hidden = type === 'transfer';
+        $('#c-to').hidden = type !== 'transfer';
+        $('#f-save').textContent = TYPES[type].save;
+        drawAmount();
         drawCategories();
+        drawDetails();
       }
 
-      el.querySelector('.segmented').addEventListener('click', (e) => {
+      $('.type-switch').addEventListener('click', (e) => {
         const b = e.target.closest('[data-type]');
         if (b) setType(b.dataset.type);
       });
 
-      el.querySelector('#f-cats').addEventListener('click', (e) => {
+      $('.keypad').addEventListener('click', (e) => {
+        const k = e.target.closest('[data-key]');
+        if (k) press(k.dataset.key);
+      });
+
+      $('#f-cats').addEventListener('click', (e) => {
         const b = e.target.closest('[data-cat]');
         if (!b) return;
-        // Scelta la categoria, chiudi la tastiera numerica (su iPhone non ha il tasto "Fine").
-        if (document.activeElement === amountInput) amountInput.blur();
         categoryId = b.dataset.cat;
         drawCategories();
         showError(el, '');
         // Per i movimenti arrivati da banca o file, proponi di creare una regola.
-        const remember = el.querySelector('.remember');
-        if (remember) remember.hidden = categoryId === tx.categoryId || !el.querySelector('#f-keyword').value;
+        const remember = $('.remember');
+        if (remember) remember.hidden = categoryId === tx.categoryId || !$('#f-keyword').value;
       });
 
-      el.querySelector('#f-save').addEventListener('click', async () => {
-        const amount = parseAmount(amountInput.value);
-        const accountId = el.querySelector('#f-from').value;
-        const toAccountId = el.querySelector('#f-to').value;
-        const date = el.querySelector('#f-date').value;
-        if (!(amount > 0)) return showError(el, 'Inserisci un importo valido, ad esempio 12,50');
+      el.querySelectorAll('#f-from, #f-to, #f-date').forEach((input) => input.addEventListener('change', drawDetails));
+      // Sul computer il selettore della data si apre solo cliccando l'icona: lo apriamo noi.
+      $('#f-date').addEventListener('click', (e) => {
+        try {
+          e.target.showPicker?.();
+        } catch {
+          // non supportato: il browser apre il suo selettore
+        }
+      });
+
+      // Nota: mentre scrivi il tastierino si nasconde, così la tastiera dell'iPhone ha spazio.
+      $('#c-note').addEventListener('click', () => {
+        $('.note-box').hidden = false;
+        noteInput.focus();
+      });
+      noteInput.addEventListener('focus', () => el.classList.add('typing'));
+      noteInput.addEventListener('blur', () => {
+        el.classList.remove('typing');
+        if (!noteInput.value.trim()) $('.note-box').hidden = true;
+        drawDetails();
+      });
+      noteInput.addEventListener('keydown', (e) => e.key === 'Enter' && noteInput.blur());
+
+      $('#f-save').addEventListener('click', save);
+      $('#f-delete')?.addEventListener('click', remove);
+
+      // Sul computer si può scrivere l'importo anche con la tastiera.
+      onKeyboard = (e) => {
+        if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey) return;
+        if (/^[0-9]$/.test(e.key)) press(e.key);
+        else if (e.key === ',' || e.key === '.') press(',');
+        else if (e.key === 'Backspace') press('back');
+        else if (e.key === 'Enter') save();
+        else return;
+        e.preventDefault();
+      };
+      document.addEventListener('keydown', onKeyboard);
+
+      async function save() {
+        const amount = rawToCents(raw);
+        const accountId = $('#f-from').value;
+        const toAccountId = $('#f-to').value;
+        const date = $('#f-date').value;
+        if (!(amount > 0)) {
+          drawAmount(true);
+          return showError(el, "Scrivi l'importo con il tastierino");
+        }
         if (type !== 'transfer' && !categoryId) return showError(el, 'Scegli una categoria');
         if (type === 'transfer' && accountId === toAccountId) return showError(el, 'Scegli due conti diversi');
         if (!date) return showError(el, 'Scegli una data');
 
-        await saveTransaction({
+        const saved = await saveTransaction({
           ...tx,
           type,
           amount,
@@ -156,13 +319,13 @@ export function openTransactionSheet(tx = null) {
           toAccountId: type === 'transfer' ? toAccountId : null,
           categoryId: type === 'transfer' ? null : categoryId,
           date,
-          note: el.querySelector('#f-note').value.trim(),
+          note: noteInput.value.trim(),
           toReview: false,
         });
-        const remember = el.querySelector('.remember');
-        const keyword = el.querySelector('#f-keyword')?.value.trim();
+        const remember = $('.remember');
+        const keyword = $('#f-keyword')?.value.trim();
         let alsoFixed = 0;
-        if (remember && !remember.hidden && el.querySelector('#f-remember').checked && keyword && type !== 'transfer') {
+        if (remember && !remember.hidden && $('#f-remember').checked && keyword && type !== 'transfer') {
           const rule = { keyword, action: 'category', categoryId };
           await saveRule(rule);
           // La nuova regola sistema subito anche gli altri movimenti ancora da rivedere.
@@ -175,22 +338,41 @@ export function openTransactionSheet(tx = null) {
         rememberAccount(accountId);
         close();
         await refresh();
-        const alert = type === 'expense' ? budgetAlert(categoryId, date.slice(0, 7)) : null;
-        if (alert) toast(alert.message, alert.level);
-        else if (alsoFixed) toast(`Regola salvata · sistemati altri ${alsoFixed} movimenti`);
-        else toast(tx ? 'Movimento aggiornato' : 'Movimento salvato');
-      });
 
-      el.querySelector('#f-delete')?.addEventListener('click', async () => {
+        // Un movimento appena creato si può annullare subito dal messaggio.
+        const undo = tx
+          ? null
+          : {
+              label: 'Annulla',
+              run: async () => {
+                await deleteTransaction(saved.id);
+                await refresh();
+              },
+            };
+        const alert = type === 'expense' ? budgetAlert(categoryId, date.slice(0, 7)) : null;
+        if (alert) toast(alert.message, { tone: alert.level, action: undo });
+        else if (alsoFixed) toast(`Regola salvata · sistemati altri ${alsoFixed} movimenti`);
+        else toast(tx ? 'Movimento aggiornato' : TYPES[type].saved, { action: undo });
+      }
+
+      async function remove() {
         if (!confirm('Eliminare questo movimento?')) return;
         await deleteTransaction(tx.id);
         close();
-        toast('Movimento eliminato');
         await refresh();
-      });
+        toast('Movimento eliminato', {
+          action: {
+            label: 'Annulla',
+            run: async () => {
+              await saveTransaction(tx);
+              await refresh();
+            },
+          },
+        });
+      }
 
+      if (tx?.note) $('.note-box').hidden = false;
       setType(type);
-      if (!tx) amountInput.focus();
     },
   });
 }

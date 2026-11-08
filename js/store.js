@@ -176,7 +176,9 @@ export function sortTransactions(list) {
 
 export async function saveTransaction(t) {
   const now = Date.now();
-  await db.put('transactions', { source: 'manual', createdAt: now, ...t, id: t.id || uid(), updatedAt: now });
+  const saved = { source: 'manual', createdAt: now, ...t, id: t.id || uid(), updatedAt: now };
+  await db.put('transactions', saved);
+  return saved;
 }
 
 export const deleteTransaction = (id) => db.remove('transactions', id);
@@ -196,13 +198,24 @@ export async function saveAccount(a) {
   await db.put('accounts', { archived: false, createdAt: Date.now(), ...a, id: a.id || uid() });
 }
 
-export const deleteAccount = (id) => db.remove('accounts', id);
+// Eliminando un conto o una categoria spariscono anche le regole che li usavano.
+async function removeRulesWhere(test) {
+  for (const r of await db.getAll('rules')) if (test(r)) await db.remove('rules', r.id);
+}
+
+export async function deleteAccount(id) {
+  await db.remove('accounts', id);
+  await removeRulesWhere((r) => r.action === 'transfer' && r.accountId === id);
+}
 
 export async function saveCategory(c) {
   await db.put('categories', { archived: false, ...c, id: c.id || uid() });
 }
 
-export const deleteCategory = (id) => db.remove('categories', id);
+export async function deleteCategory(id) {
+  await db.remove('categories', id);
+  await removeRulesWhere((r) => r.action === 'category' && r.categoryId === id);
+}
 
 export const saveCategories = (list) => db.putMany('categories', list);
 

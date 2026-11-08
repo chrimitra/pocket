@@ -1,6 +1,6 @@
 // Aspetto dell'app: automatico (come l'iPhone), chiaro o scuro. La scelta resta su questo dispositivo.
 const KEY = 'tasca:theme';
-const BAR = { light: '#F3F4F1', dark: '#101513' };
+const BAR = { light: '#F3F5F4', dark: '#0D1110' };
 
 export function getTheme() {
   try {

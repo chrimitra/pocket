@@ -1,7 +1,9 @@
 import { averageExpenseToDay, averages, categoryTotals, dailyBalance, monthlyTotals, periodMonths } from '../analytics.js';
 import { esc, euro, monthLabel, parseISODate } from '../format.js';
 import { columnChart, legend, lineChart } from '../ui/charts.js';
-import { emptyState, lookups } from '../ui/components.js';
+import { insightList } from '../insights.js';
+import { emptyState, lookups, pageHeader } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
 
 export const title = 'Grafici';
 
@@ -38,8 +40,8 @@ export function render(el, data) {
   redraw = null;
   if (!data.transactions.length) {
     el.innerHTML = `
-      <header class="page-header"><h1>Grafici</h1></header>
-      <section class="card">${emptyState('📈', 'I grafici compariranno quando avrai registrato qualche movimento.')}</section>`;
+      ${pageHeader('Grafici')}
+      <section class="card">${emptyState('chart', 'Ancora niente da mostrare', 'I grafici si riempiono man mano che registri o importi movimenti.')}</section>`;
     return;
   }
 
@@ -53,6 +55,7 @@ export function render(el, data) {
   const catTotal = cats.reduce((s, c) => s + c.total, 0);
   const maps = lookups(data);
   const periodName = months.length === 1 ? monthLabel(months[0]) : `${monthLabel(months[0])} – ${monthLabel(current.ym)}`;
+  const monthName = monthLabel(current.ym).split(' ')[0].toLowerCase();
 
   // Uscite del mese in corso rispetto al solito ritmo allo stesso giorno: spendere di più è un segnale negativo.
   let delta = '';
@@ -61,37 +64,38 @@ export function render(el, data) {
     const r = current.expense / usual - 1;
     delta =
       Math.abs(r) < 0.03
-        ? '<span class="delta">in linea con il solito</span>'
-        : `<span class="delta ${r > 0 ? 'neg' : 'pos'}">${r > 0 ? '▲' : '▼'} ${pct(Math.abs(r))} ${r > 0 ? 'più' : 'meno'} del solito</span>`;
-    delta += '<span class="delta">rispetto allo stesso giorno dei mesi scorsi</span>';
+        ? '<span class="delta">come al solito</span>'
+        : `<span class="delta ${r > 0 ? 'neg' : 'pos'}">${icon(r > 0 ? 'trend-up' : 'trend-down')}${pct(Math.abs(r))} ${r > 0 ? 'più' : 'meno'} del solito</span>`;
   }
-  const avgNote = avg.months === 1 ? 'su 1 mese' : `media di ${avg.months} mesi conclusi`;
+  const avgNote = avg.months === 1 ? 'su 1 mese' : `media di ${avg.months} mesi`;
 
   el.innerHTML = `
-    <header class="page-header"><h1>Grafici</h1></header>
+    ${pageHeader('Grafici', { sub: 'Come vanno i tuoi soldi nel tempo' })}
     <div class="segmented period" role="radiogroup" aria-label="Periodo">
       ${PERIODS.map(([v, l]) => `<button type="button" role="radio" data-period="${v}" aria-checked="${v === ui.period}">${l}</button>`).join('')}
     </div>
 
+    ${periodInsights({ rows, avg, change, cats, catTotal, maps, months })}
+
     <section class="tiles">
-      <div class="tile"><span class="tile-label">Uscite di ${monthLabel(current.ym).split(' ')[0].toLowerCase()} finora</span><strong>${euro(current.expense)}</strong>${delta}</div>
-      <div class="tile"><span class="tile-label">Uscite medie al mese</span><strong>${euro(avg.expense)}</strong><span class="delta">${avgNote}</span></div>
-      <div class="tile"><span class="tile-label">Risparmio medio al mese</span><strong class="${avg.saved < 0 ? 'neg' : ''}">${euro(avg.saved)}</strong><span class="delta">${avgNote}</span></div>
-      <div class="tile"><span class="tile-label">Tasso di risparmio</span><strong>${avg.rate === null ? '—' : pct(avg.rate)}</strong><span class="delta">delle entrate</span></div>
+      <div class="tile"><span class="tile-label">Spesi a ${monthName} finora</span><strong>${euro(current.expense)}</strong>${delta}</div>
+      <div class="tile"><span class="tile-label">Spesi in media al mese</span><strong>${euro(avg.expense)}</strong><span class="delta">${avgNote}</span></div>
+      <div class="tile"><span class="tile-label">Messi da parte al mese</span><strong class="${avg.saved < 0 ? 'neg' : ''}">${euro(avg.saved)}</strong><span class="delta">${avgNote}</span></div>
+      <div class="tile"><span class="tile-label">Quota risparmiata</span><strong>${avg.rate === null ? '—' : pct(Math.max(0, avg.rate))}</strong><span class="delta">di quello che entra</span></div>
     </section>
 
     <section class="card">
-      <h2 class="card-title">Andamento del saldo</h2>
-      <p class="card-sub">${change >= 0 ? 'Aumentato' : 'Diminuito'} di <strong>${euro(Math.abs(change))}</strong> da inizio periodo</p>
+      <div class="card-head"><h2 class="card-title">Andamento del saldo</h2></div>
+      <p class="card-sub">${change === 0 ? 'Stabile' : change > 0 ? 'Cresciuto' : 'Sceso'}${change ? ` di <strong>${euro(Math.abs(change))}</strong>` : ''} da ${monthLabel(months[0]).toLowerCase()}. Tocca il grafico per vedere un giorno.</p>
       <div id="balance-chart"></div>
     </section>
 
     <section class="card">
-      <h2 class="card-title">Entrate e uscite</h2>
-      <p class="card-sub">${esc(periodName)}</p>
+      <div class="card-head"><h2 class="card-title">Entrate e uscite</h2></div>
+      <p class="card-sub">${esc(periodName)} · tocca una colonna per i dettagli</p>
       ${legend(SERIES)}
       <div id="months-chart"></div>
-      <button type="button" class="text-btn" id="toggle-table">${ui.table ? 'Nascondi tabella' : 'Mostra tabella'}</button>
+      <button type="button" class="text-btn" id="toggle-table">${icon(ui.table ? 'chevron-down' : 'chevron-right')}${ui.table ? 'Nascondi i numeri' : 'Mostra i numeri mese per mese'}</button>
       ${
         ui.table
           ? `<table class="data-table">
@@ -109,8 +113,8 @@ export function render(el, data) {
     </section>
 
     <section class="card">
-      <h2 class="card-title">Spese per categoria</h2>
-      <p class="card-sub">${esc(periodName)} · totale ${euro(catTotal)}</p>
+      <div class="card-head"><h2 class="card-title">Dove sono andati i soldi</h2></div>
+      <p class="card-sub">${esc(periodName)} · ${euro(catTotal)} di uscite in tutto</p>
       ${cats.length ? categoryBars(cats, catTotal, maps, months.length) : '<p class="muted">Nessuna spesa nel periodo.</p>'}
     </section>`;
 
@@ -141,6 +145,8 @@ export function render(el, data) {
   }));
 
   redraw = () => {
+    // Se nel frattempo hai cambiato pagina, non c'è niente da ridisegnare.
+    if (!el.querySelector('#balance-chart')) return;
     lineChart(el.querySelector('#balance-chart'), {
       points: balancePoints,
       format: euro,
@@ -156,6 +162,54 @@ export function render(el, data) {
   redraw();
 }
 
+// Riassunto a parole del periodo scelto.
+function periodInsights({ rows, avg, change, cats, catTotal, maps, months }) {
+  const items = [];
+  if (avg.rate !== null) {
+    items.push(
+      avg.saved >= 0
+        ? { icon: 'piggy', tone: 'good', html: `In media metti da parte <strong>${euro(avg.saved)} al mese</strong>, il ${pct(avg.rate)} di quello che entra.` }
+        : { icon: 'alert', tone: 'warn', html: `In media spendi <strong>${euro(-avg.saved)} al mese</strong> più di quanto entra.` },
+    );
+  }
+  if (cats.length && catTotal) {
+    const c = maps.cat.get(cats[0].categoryId);
+    items.push({
+      icon: 'coins',
+      tone: '',
+      html: `La voce che pesa di più è <strong>${esc(c?.icon ?? '')} ${esc(c?.name ?? 'Senza categoria')}</strong>: ${pct(cats[0].total / catTotal)} delle uscite${
+        months.length > 1 ? `, circa ${euro(Math.round(cats[0].total / months.length))} al mese` : ''
+      }.`,
+    });
+  }
+  // Confronto tra gli ultimi due mesi conclusi.
+  const closed = rows.slice(0, -1).filter((r) => r.expense > 0);
+  if (closed.length >= 2) {
+    const [prev, last] = closed.slice(-2);
+    const r = last.expense / prev.expense - 1;
+    if (Math.abs(r) >= 0.05) {
+      const name = (ym) => monthLabel(ym).split(' ')[0].toLowerCase();
+      items.push({
+        icon: r < 0 ? 'trend-down' : 'trend-up',
+        tone: r < 0 ? 'good' : 'warn',
+        html: `A ${name(last.ym)} hai speso <strong>${pct(Math.abs(r))} ${r < 0 ? 'in meno' : 'in più'}</strong> che a ${name(prev.ym)}.`,
+      });
+    }
+  }
+  if (change) {
+    items.push({
+      icon: change > 0 ? 'trend-up' : 'trend-down',
+      tone: change > 0 ? 'good' : 'warn',
+      html: `Da ${monthLabel(months[0]).toLowerCase()} il saldo totale è ${change > 0 ? 'cresciuto' : 'sceso'} di <strong>${euro(Math.abs(change))}</strong>.`,
+    });
+  }
+  if (!items.length) return '';
+  return `<section class="card">
+    <div class="card-head"><h2 class="card-title">${icon('sparkles')}In breve</h2></div>
+    ${insightList(items.slice(0, 3))}
+  </section>`;
+}
+
 function categoryBars(cats, total, maps, monthCount) {
   const top = cats.slice(0, TOP_CATEGORIES);
   const rest = cats.slice(TOP_CATEGORIES).reduce((s, c) => s + c.total, 0);
@@ -169,7 +223,7 @@ function categoryBars(cats, total, maps, monthCount) {
     .map(
       (it) => `
       <li>
-        <div class="hbar-label"><span>${esc(it.icon)} ${esc(it.name)}</span><span class="muted">${pct(it.total / total)}</span></div>
+        <div class="hbar-label"><span>${esc(it.icon)} ${esc(it.name)}</span><span class="muted">${pct(it.total / total)} del totale</span></div>
         <div class="hbar-row">
           <div class="hbar-track"><div class="hbar" style="width:${Math.max(1, (it.total / max) * 100)}%"></div></div>
           <strong>${euro(it.total)}</strong>

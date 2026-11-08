@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Tasca</title>
-    <meta name="description" content="Le tue finanze personali: movimenti, conti e spese.">
-    <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#101513" media="(prefers-color-scheme: dark)">
+    <meta name="description" content="Le tue finanze personali: movimenti, conti, budget e grafici.">
+    <meta name="theme-color" content="#F3F5F4" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0D1110" media="(prefers-color-scheme: dark)">
     <script>
       // Applica subito il tema scelto, prima che la pagina compaia (niente lampo di colore sbagliato).
       try {
@@ -26,30 +26,32 @@
   </head>
   <body>
     <div id="install-hint" class="install-hint" hidden>
-      <span>Installa Tasca: tocca <strong>Condividi</strong> e poi <strong>Aggiungi alla schermata Home</strong>.</span>
-      <button type="button" aria-label="Chiudi">✕</button>
+      <span>Installa Tasca sul telefono: tocca <strong>Condividi</strong> e poi <strong>Aggiungi alla schermata Home</strong>.</span>
+      <button type="button" aria-label="Chiudi">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </button>
     </div>
 
     <main id="view" class="view"></main>
 
     <nav class="tabbar" aria-label="Sezioni">
       <a href="#/home" data-tab="home">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></svg>
         <span>Home</span>
       </a>
       <a href="#/movimenti" data-tab="movimenti">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
         <span>Movimenti</span>
       </a>
       <button type="button" id="add-btn" class="tab-add" aria-label="Nuovo movimento">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </button>
       <a href="#/budget" data-tab="budget">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12h.01"/></svg>
         <span>Budget</span>
       </a>
       <a href="#/grafici" data-tab="grafici">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16"/><path d="m7.5 15 3.5-4 3 2.5 5-6.5"/></svg>
         <span>Grafici</span>
       </a>
     </nav>

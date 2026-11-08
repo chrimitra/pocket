@@ -2,7 +2,11 @@ import { esc, firstGrapheme, toISODate } from '../format.js';
 import { CATEGORY_COLORS, deleteCategory, exportData, importData, saveCategory, wipe } from '../store.js';
 import { refresh, state } from '../state.js';
 import { getTheme, setTheme } from '../theme.js';
+import { navRow, pageHeader } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
 import { openSheet, showError, toast } from '../ui/sheet.js';
+
+export const APP_VERSION = '1.0';
 
 export const title = 'Impostazioni';
 
@@ -16,74 +20,68 @@ export function render(el, data) {
           .map(
             (c) => `
           <button class="row ${c.archived ? 'archived' : ''}" data-cat="${esc(c.id)}">
-            <span class="row-icon" style="--c:${esc(c.color)}">${esc(c.icon)}</span>
+            <span class="row-icon emoji" style="--c:${esc(c.color)}">${esc(c.icon)}</span>
             <span class="row-main"><span class="row-title">${esc(c.name)}</span>${c.archived ? '<span class="row-sub">Archiviata</span>' : ''}</span>
-            <span class="row-chevron" aria-hidden="true">›</span>
+            <span class="row-chevron">${icon('chevron-right')}</span>
           </button>`,
           )
           .join('')}
-        <button class="row add" data-new="${kind}"><span class="row-icon">＋</span><span class="row-main"><span class="row-title">Nuova categoria</span></span></button>
+        <button class="row add" data-new="${kind}"><span class="row-icon tone-primary">${icon('plus')}</span><span class="row-main"><span class="row-title">Nuova categoria</span></span></button>
       </section>`;
   };
+  const connections = data.bank?.connections?.length ?? 0;
+  const theme = getTheme();
 
   el.innerHTML = `
-    <header class="page-header"><a class="back" href="#/home">‹ Home</a><h1>Impostazioni</h1></header>
+    ${pageHeader('Impostazioni', { back: { href: '#/home', label: 'Home' } })}
+
     <h2 class="section-title">Aspetto</h2>
-    <div class="segmented" role="radiogroup" aria-label="Aspetto">
+    <div class="segmented with-icons" role="radiogroup" aria-label="Aspetto">
       ${[
-        ['auto', 'Automatico'],
-        ['light', '☀️ Chiaro'],
-        ['dark', '🌙 Scuro'],
+        ['auto', 'contrast', 'Automatico'],
+        ['light', 'sun', 'Chiaro'],
+        ['dark', 'moon', 'Scuro'],
       ]
-        .map(([v, l]) => `<button type="button" role="radio" data-theme-choice="${v}" aria-checked="${getTheme() === v}">${l}</button>`)
+        .map(([v, i, l]) => `<button type="button" role="radio" data-theme-choice="${v}" aria-checked="${theme === v}">${icon(i)}${l}</button>`)
         .join('')}
     </div>
-    <h2 class="section-title">Generale</h2>
+
+    <h2 class="section-title">Conti e movimenti</h2>
     <section class="card flush rows">
-      <a class="row" href="#/conti">
-        <span class="row-icon">🏦</span>
-        <span class="row-main"><span class="row-title">Conti</span><span class="row-sub">Saldi, nuovi conti, archiviati</span></span>
-        <span class="row-chevron" aria-hidden="true">›</span>
-      </a>
-      <a class="row" href="#/banca">
-        <span class="row-icon">🏤</span>
-        <span class="row-main"><span class="row-title">Collegamento banca</span><span class="row-sub">${
-          data.bank?.connections?.length ? `${data.bank.connections.length} collegamento attivo` : 'Scarica i movimenti da BancoPosta'
-        }</span></span>
-        <span class="row-chevron" aria-hidden="true">›</span>
-      </a>
-      <a class="row" href="#/importa">
-        <span class="row-icon">📥</span>
-        <span class="row-main"><span class="row-title">Importa da file</span><span class="row-sub">Lista movimenti BancoPosta (Excel o CSV)</span></span>
-        <span class="row-chevron" aria-hidden="true">›</span>
-      </a>
-      <a class="row" href="#/regole">
-        <span class="row-icon">🪄</span>
-        <span class="row-main"><span class="row-title">Regole automatiche</span><span class="row-sub">${data.rules.length} regole per categorizzare</span></span>
-        <span class="row-chevron" aria-hidden="true">›</span>
-      </a>
+      ${navRow({ href: '#/conti', iconName: 'wallet', title: 'Conti', sub: 'Saldi, nuovi conti, archiviati' })}
+      ${navRow({ href: '#/importa', iconName: 'file', title: 'Importa da file', sub: 'Excel di BancoPosta o Revolut', tone: 'blue' })}
+      ${navRow({ href: '#/regole', iconName: 'wand', title: 'Regole automatiche', sub: `${data.rules.length} regole che scelgono la categoria per te`, tone: 'violet' })}
+      ${navRow({
+        href: '#/banca',
+        iconName: 'link',
+        title: 'Collegamento banca',
+        sub: connections ? `${connections} collegamento attivo` : 'Facoltativo · scarica i movimenti da solo',
+        tone: 'neutral',
+      })}
     </section>
+
     ${group('expense', 'Categorie di spesa')}
     ${group('income', 'Categorie di entrata')}
 
     <h2 class="section-title">I tuoi dati</h2>
     <section class="card flush rows">
-      <button class="row" id="export"><span class="row-icon">⬆️</span><span class="row-main"><span class="row-title">Esporta backup</span><span class="row-sub">Salva un file con tutti i dati</span></span></button>
-      <label class="row" for="import-file"><span class="row-icon">⬇️</span><span class="row-main"><span class="row-title">Ripristina backup</span><span class="row-sub">Sostituisce i dati attuali</span></span></label>
-      <button class="row danger" id="wipe"><span class="row-icon">🗑️</span><span class="row-main"><span class="row-title">Cancella tutti i dati</span></span></button>
+      ${navRow({ tag: 'button', id: 'export', iconName: 'upload', title: 'Esporta backup', sub: 'Salva un file con tutti i dati, ad esempio su iCloud Drive', tone: 'blue' })}
+      ${navRow({ tag: 'label', iconName: 'download', title: 'Ripristina backup', sub: 'Sostituisce i dati di adesso con quelli del file', tone: 'neutral', attrs: 'for="import-file"' })}
+      ${navRow({ tag: 'button', id: 'wipe', iconName: 'trash', title: 'Cancella tutti i dati', danger: true })}
     </section>
     <input type="file" id="import-file" accept="application/json,.json" hidden>
+    <p class="hint-text">${icon('shield')} I tuoi dati restano solo su questo telefono, non vengono inviati a nessuno. Per non perderli se cambi o perdi il telefono, esporta un backup una volta al mese.</p>
 
     <h2 class="section-title">Installa su iPhone</h2>
     <section class="card">
       <ol class="steps">
         <li>Apri Tasca in <strong>Safari</strong>.</li>
-        <li>Tocca <strong>Condividi</strong> (il quadrato con la freccia verso l'alto).</li>
+        <li>Tocca <strong>Condividi</strong> (il quadrato con la freccia in su).</li>
         <li>Scegli <strong>Aggiungi alla schermata Home</strong>.</li>
       </ol>
     </section>
 
-    <p class="footnote">Per ora i dati sono salvati solo su questo dispositivo. Fai un backup ogni tanto: la sincronizzazione sul cloud arriverà in una fase successiva.<br>Tasca · versione 0.7</p>`;
+    <p class="footnote">Tasca · versione ${APP_VERSION}</p>`;
 
   el.querySelectorAll('[data-cat]').forEach((b) =>
     b.addEventListener('click', () => openCategorySheet(data.categories.find((c) => c.id === b.dataset.cat))),
@@ -117,10 +115,10 @@ function openCategorySheet(category, kind = category?.kind) {
         <label class="field"><span>Nome</span><input id="c-name" maxlength="30" placeholder="Es. Palestra" value="${esc(category?.name ?? '')}"></label>
         ${category ? `<label class="field toggle"><span>Archiviata</span><input type="checkbox" id="c-archived" ${category.archived ? 'checked' : ''}></label>` : ''}
       </div>
-      <p class="hint-text">Per l'icona usa un'emoji dalla tastiera. Le categorie archiviate non compaiono più tra le scelte, ma i vecchi movimenti le mantengono.</p>
+      <p class="hint-text">Per l'icona scegli un'emoji dalla tastiera (il tasto con la faccina). Le categorie archiviate non compaiono più tra le scelte, ma i vecchi movimenti le mantengono.</p>
       <p class="form-error" hidden></p>
-      <button type="button" class="btn primary block" id="c-save">Salva</button>
-      ${category && !used ? '<button type="button" class="btn danger block" id="c-delete">Elimina categoria</button>' : ''}`,
+      ${category && !used ? `<button type="button" class="btn danger-text block" id="c-delete">${icon('trash')}Elimina categoria</button>` : ''}`,
+    footer: `<button type="button" class="btn primary block" id="c-save">${category ? 'Salva modifiche' : 'Crea categoria'}</button>`,
     onMount(el, close) {
       el.querySelector('#c-save').addEventListener('click', async () => {
         const name = el.querySelector('#c-name').value.trim();

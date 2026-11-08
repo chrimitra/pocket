@@ -1,6 +1,8 @@
-import { currentMonth, dayLabel, esc, euro, monthLabel, shiftMonth } from '../format.js';
+import { currentMonth, dayLabel, esc, euro, monthLabel, parseAmount, shiftMonth } from '../format.js';
 import { signedAmount, sortTransactions } from '../store.js';
-import { bindTxRows, emptyState, lookups, txRow } from '../ui/components.js';
+import { bindTxRows, emptyState, lookups, pageHeader, txRow } from '../ui/components.js';
+import { icon } from '../ui/icons.js';
+import { openTransactionSheet } from '../ui/transaction-sheet.js';
 
 export const title = 'Movimenti';
 
@@ -16,35 +18,41 @@ export function render(el, data) {
     ui.review = true;
     history.replaceState(null, '', '#/movimenti');
   }
+  const isCurrent = ui.ym === currentMonth();
 
   el.innerHTML = `
-    <header class="page-header with-action"><h1>Movimenti</h1><a class="pill-btn" href="#/importa">⬇︎ Importa</a></header>
+    ${pageHeader('Movimenti', { actions: `<a class="pill-btn" href="#/importa">${icon('download')}Importa</a>` })}
     ${
       toReview.length
         ? `<button type="button" class="review-chip ${ui.review ? 'on' : ''}" id="review">
-            🔔 ${toReview.length} dalla banca da rivedere${ui.review ? ' · mostra tutti' : ''}
+            ${icon('bell')}${ui.review ? 'Torna a tutti i movimenti' : `${toReview.length} dalla banca da rivedere`}
           </button>`
         : ''
     }
     ${
       ui.review
-        ? `<p class="hint-text">Questi movimenti non avevano una regola: sono finiti in «Altro». Toccane uno, scegli la categoria e salva.</p>
+        ? `<p class="hint-text">Questi movimenti non avevano una regola e sono finiti in «Altro». Toccane uno, scegli la categoria e salva: puoi anche far sì che Tasca se lo ricordi.</p>
            <section class="card flush rows" id="review-list">${sortTransactions(toReview).map((t) => txRow(t, maps)).join('')}</section>`
+        : `
+    <div class="month-nav">
+      <button class="icon-btn" data-shift="-1" aria-label="Mese precedente">${icon('chevron-left')}</button>
+      <strong>${monthLabel(ui.ym)}</strong>
+      <button class="icon-btn" data-shift="1" aria-label="Mese successivo" ${isCurrent ? 'disabled' : ''}>${icon('chevron-right')}</button>
+    </div>
+    <label class="search">
+      ${icon('search')}
+      <input type="search" id="q" placeholder="Cerca per nota, categoria o importo" value="${esc(ui.q)}" aria-label="Cerca nei movimenti">
+    </label>
+    ${
+      accounts.length > 1
+        ? `<div class="filter-chips" role="radiogroup" aria-label="Filtra per conto">
+            <button type="button" role="radio" data-acc="" aria-checked="${!ui.account}">Tutti</button>
+            ${accounts.map((a) => `<button type="button" role="radio" data-acc="${esc(a.id)}" aria-checked="${a.id === ui.account}">${esc(a.name)}</button>`).join('')}
+          </div>`
         : ''
     }
-    <div class="month-nav" ${ui.review ? 'hidden' : ''}>
-      <button class="icon-btn" data-shift="-1" aria-label="Mese precedente">‹</button>
-      <strong>${monthLabel(ui.ym)}</strong>
-      <button class="icon-btn" data-shift="1" aria-label="Mese successivo">›</button>
-    </div>
-    <div class="filters" ${ui.review ? 'hidden' : ''}>
-      <input type="search" id="q" placeholder="Cerca" value="${esc(ui.q)}" aria-label="Cerca nei movimenti">
-      <select id="acc" aria-label="Filtra per conto">
-        <option value="">Tutti i conti</option>
-        ${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === ui.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
-      </select>
-    </div>
-    <div id="list" ${ui.review ? 'hidden' : ''}></div>`;
+    <div id="list"></div>`
+    }`;
 
   el.querySelector('#review')?.addEventListener('click', () => {
     ui.review = !ui.review;
@@ -52,23 +60,35 @@ export function render(el, data) {
   });
   const reviewList = el.querySelector('#review-list');
   if (reviewList) bindTxRows(reviewList, data);
+  if (ui.review) return;
 
   const listEl = el.querySelector('#list');
 
   function draw() {
     const q = ui.q.trim().toLowerCase();
+    // Se scrivi un numero ("23,90") cerca anche per importo.
+    const qAmount = /\d/.test(q) ? parseAmount(q) : NaN;
     const items = sortTransactions(data.transactions).filter((t) => {
       if (!t.date.startsWith(ui.ym)) return false;
       if (ui.account && t.accountId !== ui.account && t.toAccountId !== ui.account) return false;
       if (!q) return true;
-      const haystack = [t.note, maps.cat.get(t.categoryId)?.name, maps.acc.get(t.accountId)?.name, maps.acc.get(t.toAccountId)?.name]
+      if (Math.abs(qAmount) === t.amount) return true;
+      const haystack = [t.note, t.bankDescription, maps.cat.get(t.categoryId)?.name, maps.acc.get(t.accountId)?.name, maps.acc.get(t.toAccountId)?.name]
         .join(' ')
         .toLowerCase();
       return haystack.includes(q);
     });
 
     if (!items.length) {
-      listEl.innerHTML = emptyState('🔎', q ? 'Nessun movimento trovato.' : 'Nessun movimento in questo mese.');
+      listEl.innerHTML = q
+        ? emptyState('search', 'Nessun risultato', `Nessun movimento di ${monthLabel(ui.ym).toLowerCase()} corrisponde a «${esc(ui.q)}».`)
+        : emptyState(
+            'receipt',
+            `Nessun movimento a ${monthLabel(ui.ym).split(' ')[0].toLowerCase()}`,
+            isCurrent ? 'Tocca + per registrare la prima spesa del mese.' : 'Prova un altro mese con le frecce qui sopra.',
+            isCurrent ? '<button type="button" class="btn primary" id="first-tx">Aggiungi movimento</button>' : '',
+          );
+      listEl.querySelector('#first-tx')?.addEventListener('click', () => openTransactionSheet());
       return;
     }
 
@@ -83,16 +103,16 @@ export function render(el, data) {
     }
 
     listEl.innerHTML = `
-      <div class="summary-line">
-        <span>Entrate <strong class="pos">${euro(income)}</strong></span>
-        <span>Uscite <strong class="neg">${euro(expense)}</strong></span>
+      <div class="month-totals">
+        <div class="in">${icon('arrow-in')}<span>Entrate</span><strong>${euro(income)}</strong></div>
+        <div class="out">${icon('arrow-out')}<span>Uscite</span><strong>${euro(expense)}</strong></div>
       </div>
       ${[...days]
         .map(([date, list]) => {
           const net = list.reduce((s, t) => s + signedAmount(t, ui.account || undefined), 0);
           return `
           <section class="day">
-            <h2 class="day-head"><span>${dayLabel(date)}</span><span class="${net < 0 ? 'neg' : net > 0 ? 'pos' : ''}">${euro(net, { sign: true })}</span></h2>
+            <h2 class="day-head"><span>${dayLabel(date)}</span>${net ? `<span class="${net < 0 ? '' : 'pos'}">${euro(net, { sign: true })}</span>` : ''}</h2>
             <div class="card flush rows">${list.map((t) => txRow(t, maps, ui.account)).join('')}</div>
           </section>`;
         })
@@ -110,10 +130,13 @@ export function render(el, data) {
     ui.q = e.target.value;
     draw();
   });
-  el.querySelector('#acc').addEventListener('change', (e) => {
-    ui.account = e.target.value;
-    draw();
-  });
+  el.querySelectorAll('[data-acc]').forEach((b) =>
+    b.addEventListener('click', () => {
+      ui.account = b.dataset.acc;
+      el.querySelectorAll('[data-acc]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      draw();
+    }),
+  );
 
   draw();
 }
